@@ -1,18 +1,16 @@
-// Copyright (C) 2017 Chris Richardson and Garth N. Wells
+// Copyright (C) 2017-2019 Chris Richardson and Garth N. Wells
 //
 // This file is part of DOLFIN (https://www.fenicsproject.org)
 //
 // SPDX-License-Identifier:    LGPL-3.0-or-later
 
 #include <Eigen/Dense>
-#include <iostream>
 #include <memory>
 #include <pybind11/eigen.h>
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/pytypes.h>
 #include <pybind11/stl.h>
-
 #include <string>
 
 #ifdef HAS_PYBIND11_PETSC4PY
@@ -20,6 +18,7 @@
 #endif
 
 #include "casters.h"
+#include <dolfin/common/IndexMap.h>
 #include <dolfin/common/types.h>
 #include <dolfin/fem/CoordinateMapping.h>
 #include <dolfin/fem/DirichletBC.h>
@@ -88,6 +87,9 @@ void fem(py::module& m)
         },
         "Create a ufc_coordinate_mapping object from a pointer.");
 
+  m.def("init_matrix", &dolfin::fem::init_matrix,
+        "Initialise sparse matrix for a bilinear form.");
+
   // dolfin::fem::FiniteElement
   py::class_<dolfin::fem::FiniteElement,
              std::shared_ptr<dolfin::fem::FiniteElement>>(
@@ -96,29 +98,6 @@ void fem(py::module& m)
       .def("num_sub_elements", &dolfin::fem::FiniteElement::num_sub_elements)
       .def("dof_reference_coordinates",
            &dolfin::fem::FiniteElement::dof_reference_coordinates)
-      // TODO: Update for change to Eigen::Tensor
-      //   .def("tabulate_dof_coordinates",
-      //        [](const dolfin::fem::FiniteElement &self,
-      //           const dolfin::mesh::Cell &cell) {
-      //          // Get cell vertex coordinates
-      //          std::vector<double> coordinate_dofs;
-      //          cell.get_coordinate_dofs(coordinate_dofs);
-
-      //          // Tabulate the coordinates
-      //          boost::multi_array<double, 2> _dof_coords;
-      //          self.tabulate_dof_coordinates(_dof_coords, coordinate_dofs,
-      //          cell);
-
-      //          // Copy data and return
-      //          typedef Eigen::Array<double, Eigen::Dynamic, Eigen::Dynamic,
-      //                               Eigen::RowMajor>
-      //              EigenArray;
-      //          EigenArray dof_coords = Eigen::Map<EigenArray>(
-      //              _dof_coords.data(), _dof_coords.shape()[0],
-      //              _dof_coords.shape()[1]);
-      //          return dof_coords;
-      //        },
-      //        "Tabulate coordinates of dofs on cell")
       .def("space_dimension", &dolfin::fem::FiniteElement::space_dimension)
       .def("topological_dimension",
            &dolfin::fem::FiniteElement::topological_dimension)
@@ -127,9 +106,8 @@ void fem(py::module& m)
 
   // dolfin::fem::GenericDofMap
   py::class_<dolfin::fem::GenericDofMap,
-             std::shared_ptr<dolfin::fem::GenericDofMap>,
-             dolfin::common::Variable>(m, "GenericDofMap",
-                                       "DOLFIN DofMap object")
+             std::shared_ptr<dolfin::fem::GenericDofMap>>(
+      m, "GenericDofMap", "DOLFIN DofMap object")
       .def("global_dimension", &dolfin::fem::GenericDofMap::global_dimension,
            "The dimension of the global finite element function space")
       .def("index_map", &dolfin::fem::GenericDofMap::index_map)
@@ -193,8 +171,7 @@ void fem(py::module& m)
 
   // dolfin::fem::DirichletBC
   py::class_<dolfin::fem::DirichletBC,
-             std::shared_ptr<dolfin::fem::DirichletBC>,
-             dolfin::common::Variable>
+             std::shared_ptr<dolfin::fem::DirichletBC>>
       dirichletbc(
           m, "DirichletBC",
           "Object for representing Dirichlet (essential) boundary conditions");
@@ -208,28 +185,21 @@ void fem(py::module& m)
   dirichletbc
       .def(py::init<std::shared_ptr<const dolfin::function::FunctionSpace>,
                     std::shared_ptr<const dolfin::function::Function>,
-                    std::shared_ptr<const dolfin::mesh::SubDomain>,
+                    const dolfin::mesh::SubDomain&,
                     dolfin::fem::DirichletBC::Method, bool>(),
            py::arg("V"), py::arg("g"), py::arg("sub_domain"), py::arg("method"),
            py::arg("check_midpoint"))
-      .def(
-          py::init<std::shared_ptr<const dolfin::function::FunctionSpace>,
-                   std::shared_ptr<const dolfin::function::Function>,
-                   std::pair<std::shared_ptr<
-                                 const dolfin::mesh::MeshFunction<std::size_t>>,
-                             std::size_t>,
-                   dolfin::fem::DirichletBC::Method>(),
-          py::arg("V"), py::arg("g"), py::arg("sub_domain"), py::arg("method"))
+      .def(py::init<std::shared_ptr<const dolfin::function::FunctionSpace>,
+                    std::shared_ptr<const dolfin::function::Function>,
+                    const std::vector<std::int32_t>&,
+                    dolfin::fem::DirichletBC::Method>(),
+           py::arg("V"), py::arg("g"), py::arg("facets"), py::arg("method"))
       .def("function_space", &dolfin::fem::DirichletBC::function_space)
-      .def("method", &dolfin::fem::DirichletBC::method)
-      .def("get_boundary_values",
-           [](const dolfin::fem::DirichletBC& instance) {
-             dolfin::fem::DirichletBC::Map map;
-             instance.get_boundary_values(map);
-             return map;
-           })
-      .def("user_subdomain", &dolfin::fem::DirichletBC::user_sub_domain)
-      .def("set_value", &dolfin::fem::DirichletBC::set_value);
+      .def("get_boundary_values", [](const dolfin::fem::DirichletBC& instance) {
+        dolfin::fem::DirichletBC::Map map;
+        instance.get_boundary_values(map);
+        return map;
+      });
 
   py::enum_<dolfin::fem::BlockType>(
       m, "BlockType",
@@ -252,21 +222,21 @@ void fem(py::module& m)
             const std::vector<
                 std::vector<std::shared_ptr<const dolfin::fem::Form>>>,
             std::vector<std::shared_ptr<const dolfin::fem::DirichletBC>>,
-            dolfin::fem::BlockType, double>(&dolfin::fem::assemble),
-        py::arg("L"), py::arg("a"), py::arg("bcs"), py::arg("block_type"),
-        py::arg("scale") = 1.0,
+            const dolfin::la::PETScVector*, dolfin::fem::BlockType, double>(
+            &dolfin::fem::assemble),
+        py::arg("L"), py::arg("a"), py::arg("bcs"), py::arg("x0"),
+        py::arg("block_type"), py::arg("scale") = 1.0,
         "Assemble linear forms over mesh into blocked vector");
-  m.def(
-      "reassemble_blocked_vector",
-      py::overload_cast<
-          dolfin::la::PETScVector&, std::vector<const dolfin::fem::Form*>,
-          const std::vector<
-              std::vector<std::shared_ptr<const dolfin::fem::Form>>>,
-          std::vector<std::shared_ptr<const dolfin::fem::DirichletBC>>, double>(
-          &dolfin::fem::assemble),
-      py::arg("b"), py::arg("L"), py::arg("a"), py::arg("bcs"),
-      py::arg("scale") = 1.0,
-      "Re-assemble linear forms over mesh into blocked vector");
+  m.def("reassemble_blocked_vector",
+        py::overload_cast<
+            dolfin::la::PETScVector&, std::vector<const dolfin::fem::Form*>,
+            const std::vector<
+                std::vector<std::shared_ptr<const dolfin::fem::Form>>>,
+            std::vector<std::shared_ptr<const dolfin::fem::DirichletBC>>,
+            const dolfin::la::PETScVector*, double>(&dolfin::fem::assemble),
+        py::arg("b"), py::arg("L"), py::arg("a"), py::arg("bcs"), py::arg("x0"),
+        py::arg("scale") = 1.0,
+        "Re-assemble linear forms over mesh into blocked vector");
 
   m.def("assemble_blocked_matrix",
         py::overload_cast<
@@ -276,15 +246,15 @@ void fem(py::module& m)
         py::arg("a"), py::arg("bcs"), py::arg("block_type"),
         py::arg("diagonal"),
         "Assemble bilinear forms over mesh into blocked matrix");
-  m.def(
-      "reassemble_blocked_matrix",
-      py::overload_cast<
-          dolfin::la::PETScMatrix&,
-          const std::vector<std::vector<const dolfin::fem::Form*>>,
-          std::vector<std::shared_ptr<const dolfin::fem::DirichletBC>>, double>(
-          &dolfin::fem::assemble),
-      py::arg("A"), py::arg("a"), py::arg("bcs"), py::arg("diagonal"),
-      "Re-assemble bilinear forms over mesh into blocked matrix");
+  m.def("reassemble_blocked_matrix",
+        py::overload_cast<
+            dolfin::la::PETScMatrix&,
+            const std::vector<std::vector<const dolfin::fem::Form*>>,
+            std::vector<std::shared_ptr<const dolfin::fem::DirichletBC>>,
+            double, bool>(&dolfin::fem::assemble),
+        py::arg("A"), py::arg("a"), py::arg("bcs"), py::arg("diagonal"),
+        py::arg("use_nest_extract") = true,
+        "Re-assemble bilinear forms over mesh into blocked matrix");
   m.def("set_bc", &dolfin::fem::set_bc,
         "Insert boundary condition values into vector");
 
@@ -356,9 +326,8 @@ void fem(py::module& m)
       .def("set_vertex_domains", &dolfin::fem::Form::set_vertex_domains)
       .def("set_cell_tabulate",
            [](dolfin::fem::Form& self, unsigned int i, std::size_t addr) {
-             auto tabulate_tensor_ptr
-                 = (void (*)(PetscScalar*, const PetscScalar* const*,
-                             const double*, int))addr;
+             auto tabulate_tensor_ptr = (void (*)(
+                 PetscScalar*, const PetscScalar*, const double*, int))addr;
              self.integrals().set_cell_tabulate_tensor(i, tabulate_tensor_ptr);
            })
       .def("rank", &dolfin::fem::Form::rank)

@@ -4,37 +4,26 @@
 //
 // SPDX-License-Identifier:    LGPL-3.0-or-later
 
-#include <petscis.h>
-
-#include "DirichletBC.h"
+#include "assemble_matrix_impl.h"
 #include "Form.h"
 #include "GenericDofMap.h"
-#include "assemble_matrix_impl.h"
-#include "utils.h"
-#include <dolfin/common/types.h>
 #include <dolfin/function/FunctionSpace.h>
-#include <dolfin/la/PETScMatrix.h>
+#include <dolfin/la/utils.h>
 #include <dolfin/mesh/Cell.h>
 #include <dolfin/mesh/Mesh.h>
 #include <dolfin/mesh/MeshIterator.h>
-#include <petscmat.h>
-#include <string>
+#include <petscsys.h>
 
 using namespace dolfin;
-using namespace dolfin::fem;
 
 //-----------------------------------------------------------------------------
-void fem::assemble_matrix(la::PETScMatrix& A, const Form& a,
-                          const std::vector<std::int32_t>& bc_dofs0,
-                          const std::vector<std::int32_t>& bc_dofs1)
+void fem::impl::assemble_matrix(Mat A, const Form& a,
+                                const std::vector<bool>& bc0,
+                                const std::vector<bool>& bc1)
 {
-  assert(!A.empty());
-
+  assert(A);
   assert(a.mesh());
   const mesh::Mesh& mesh = *a.mesh();
-
-  const std::size_t tdim = mesh.topology().dim();
-  mesh.init(tdim);
 
   // Function spaces and dofmaps for each axis
   assert(a.function_space(0));
@@ -47,11 +36,13 @@ void fem::assemble_matrix(la::PETScMatrix& A, const Form& a,
   const fem::GenericDofMap& map1 = *V1.dofmap();
 
   // Data structures used in assembly
-  EigenRowArrayXXd coordinate_dofs;
+  Eigen::Array<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
+      coordinate_dofs;
   Eigen::Matrix<PetscScalar, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
       Ae;
 
   // Iterate over all cells
+  PetscErrorCode ierr;
   for (auto& cell : mesh::MeshRange<mesh::Cell>(mesh))
   {
     // Check that cell is not a ghost
@@ -61,35 +52,40 @@ void fem::assemble_matrix(la::PETScMatrix& A, const Form& a,
     cell.get_coordinate_dofs(coordinate_dofs);
 
     // Get dof maps for cell
+    const std::size_t cell_index = cell.index();
     Eigen::Map<const Eigen::Array<PetscInt, Eigen::Dynamic, 1>> dmap0
-        = map0.cell_dofs(cell.index());
+        = map0.cell_dofs(cell_index);
     Eigen::Map<const Eigen::Array<PetscInt, Eigen::Dynamic, 1>> dmap1
-        = map1.cell_dofs(cell.index());
+        = map1.cell_dofs(cell_index);
 
-    Ae.resize(dmap0.size(), dmap1.size());
-    Ae.setZero();
+    // Tabulate tensor
+    Ae.setZero(dmap0.size(), dmap1.size());
     a.tabulate_tensor(Ae.data(), cell, coordinate_dofs);
 
-    // FIXME: Pass in list  of cells, and list of local dofs, with
-    // Dirichlet conditions
-    // Note: could use negative dof indices to have PETSc do this
-    // Zero rows/columns for Dirichlet bcs
-    for (int i = 0; i < Ae.rows(); ++i)
+    // Zero rows/columns for essential bcs
+    if (!bc0.empty())
     {
-      const std::size_t ii = dmap0[i];
-      if (std::find(bc_dofs0.begin(), bc_dofs0.end(), ii) != bc_dofs0.end())
-        Ae.row(i).setZero();
+      for (Eigen::Index i = 0; i < Ae.rows(); ++i)
+      {
+        if (bc0[dmap0[i]])
+          Ae.row(i).setZero();
+      }
     }
-    // Loop over columns
-    for (int j = 0; j < Ae.cols(); ++j)
+    if (!bc1.empty())
     {
-      const std::size_t jj = dmap1[j];
-      if (std::find(bc_dofs1.begin(), bc_dofs1.end(), jj) != bc_dofs1.end())
-        Ae.col(j).setZero();
+      for (Eigen::Index j = 0; j < Ae.cols(); ++j)
+      {
+        if (bc1[dmap1[j]])
+          Ae.col(j).setZero();
+      }
     }
 
-    A.add_local(Ae.data(), dmap0.size(), dmap0.data(), dmap1.size(),
-                dmap1.data());
+    ierr = MatSetValuesLocal(A, dmap0.size(), dmap0.data(), dmap1.size(),
+                             dmap1.data(), Ae.data(), ADD_VALUES);
+#ifdef DEBUG
+    if (ierr != 0)
+      la::petsc_error(ierr, __FILE__, "MatSetValuesLocal");
+#endif
   }
 }
 //-----------------------------------------------------------------------------

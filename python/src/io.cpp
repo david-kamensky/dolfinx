@@ -1,4 +1,4 @@
-// Copyright (C) 2017 Chris N. Richardson Garth N. Wells
+// Copyright (C) 2017-2019 Chris N. Richardson Garth N. Wells
 //
 // This file is part of DOLFIN (https://www.fenicsproject.org)
 //
@@ -30,8 +30,8 @@ namespace dolfin_wrappers
 void io(py::module& m)
 {
   // dolfin::io::HDF5File
-  py::class_<dolfin::io::HDF5File, std::shared_ptr<dolfin::io::HDF5File>,
-             dolfin::common::Variable>(m, "HDF5File", py::dynamic_attr())
+  py::class_<dolfin::io::HDF5File, std::shared_ptr<dolfin::io::HDF5File>>(
+      m, "HDF5File", py::dynamic_attr())
       .def(py::init([](const MPICommWrapper comm, const std::string filename,
                        const std::string file_mode) {
              return std::make_unique<dolfin::io::HDF5File>(comm.get(), filename,
@@ -131,12 +131,12 @@ void io(py::module& m)
            py::arg("u"), py::arg("name"), py::arg("t"))
       .def("set_mpi_atomicity", &dolfin::io::HDF5File::set_mpi_atomicity)
       .def("get_mpi_atomicity", &dolfin::io::HDF5File::get_mpi_atomicity)
+      .def_readwrite("chunking", &dolfin::io::HDF5File::chunking)
       // others
       .def("has_dataset", &dolfin::io::HDF5File::has_dataset);
 
   // dolfin::io::XDMFFile
-  py::class_<dolfin::io::XDMFFile, std::shared_ptr<dolfin::io::XDMFFile>,
-             dolfin::common::Variable>
+  py::class_<dolfin::io::XDMFFile, std::shared_ptr<dolfin::io::XDMFFile>>
       xdmf_file(m, "XDMFFile");
 
   xdmf_file
@@ -146,7 +146,12 @@ void io(py::module& m)
                                                            encoding);
            }),
            py::arg("comm"), py::arg("filename"), py::arg("encoding"))
-      .def("close", &dolfin::io::XDMFFile::close);
+      .def("close", &dolfin::io::XDMFFile::close)
+      .def_readwrite("functions_share_mesh",
+                     &dolfin::io::XDMFFile::functions_share_mesh)
+      .def_readwrite("flush_output", &dolfin::io::XDMFFile::flush_output)
+      .def_readwrite("rewrite_function_mesh",
+                     &dolfin::io::XDMFFile::rewrite_function_mesh);
 
   // dolfin::io::XDMFFile::Encoding enums
   py::enum_<dolfin::io::XDMFFile::Encoding>(xdmf_file, "Encoding")

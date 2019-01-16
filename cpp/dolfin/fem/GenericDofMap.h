@@ -7,10 +7,9 @@
 #pragma once
 
 #include <Eigen/Dense>
-#include <dolfin/common/Variable.h>
-#include <dolfin/common/types.h>
-#include <dolfin/log/log.h>
 #include <memory>
+#include <petscsys.h>
+#include <set>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -39,9 +38,12 @@ namespace fem
 
 /// This class provides a generic interface for dof maps
 
-class GenericDofMap : public common::Variable
+class GenericDofMap
 {
 public:
+  /// Destructor
+  virtual ~GenericDofMap() = default;
+
   /// True if dof map is a view into another map (is a sub-dofmap)
   virtual bool is_view() const = 0;
 

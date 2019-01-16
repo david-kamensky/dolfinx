@@ -4,7 +4,6 @@
 //
 // SPDX-License-Identifier:    LGPL-3.0-or-later
 
-#include <dolfin/common/types.h>
 #include "SystemAssembler.h"
 #include "AssemblerBase.h"
 #include "DirichletBC.h"
@@ -16,6 +15,7 @@
 #include <array>
 #include <dolfin/common/ArrayView.h>
 #include <dolfin/common/Timer.h>
+#include <dolfin/common/types.h>
 #include <dolfin/function/FunctionSpace.h>
 #include <dolfin/la/PETScMatrix.h>
 #include <dolfin/la/PETScVector.h>
@@ -120,8 +120,8 @@ void SystemAssembler::assemble(la::PETScMatrix* A, la::PETScVector* b,
   common::Timer timer("Assemble system");
 
   // Get mesh
-  assert(_a->mesh());
-  const mesh::Mesh& mesh = *(_a->mesh());
+  // assert(_a->mesh());
+  // const mesh::Mesh& mesh = *(_a->mesh());
 
   // Get cell domains
   std::shared_ptr<const mesh::MeshFunction<std::size_t>> cell_domains
@@ -200,11 +200,6 @@ void SystemAssembler::assemble(la::PETScMatrix* A, la::PETScVector* b,
       log::log(TRACE,
                "System assembler: boundary condition %d applies to axis 0", i);
       _bcs[i]->get_boundary_values(boundary_values[0]);
-      if (MPI::size(mesh.mpi_comm()) > 1
-          && _bcs[i]->method() != DirichletBC::Method::pointwise)
-      {
-        _bcs[i]->gather(boundary_values[0]);
-      }
     }
 
     // Fetch bc on axis1
@@ -213,11 +208,6 @@ void SystemAssembler::assemble(la::PETScMatrix* A, la::PETScVector* b,
       log::log(TRACE,
                "System assembler: boundary condition %d applies to axis 1", i);
       _bcs[i]->get_boundary_values(boundary_values[1]);
-      if (MPI::size(mesh.mpi_comm()) > 1
-          && _bcs[i]->method() != DirichletBC::Method::pointwise)
-      {
-        _bcs[i]->gather(boundary_values[1]);
-      }
     }
 
     if (!axis0 && !axis1)
@@ -312,8 +302,7 @@ void SystemAssembler::cell_wise_assembly(
   dofmaps[1].push_back(ufc[1]->dolfin_form.function_space(0)->dofmap().get());
 
   // Vector to hold dof map for a cell
-  std::array<std::vector<common::ArrayView<const PetscInt>>, 2>
-      cell_dofs
+  std::array<std::vector<common::ArrayView<const PetscInt>>, 2> cell_dofs
       = {{std::vector<common::ArrayView<const PetscInt>>(2),
           std::vector<common::ArrayView<const PetscInt>>(1)}};
 
@@ -337,7 +326,8 @@ void SystemAssembler::cell_wise_assembly(
   la::PETScVector* b = tensors.second;
 
   // Iterate over all cells
-  EigenRowArrayXXd coordinate_dofs;
+  Eigen::Array<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
+      coordinate_dofs;
 
   for (auto& cell : mesh::MeshRange<mesh::Cell>(mesh))
   {
@@ -393,7 +383,7 @@ void SystemAssembler::cell_wise_assembly(
 
         // Tabulate cell tensor
         cell_integrals[form]->tabulate_tensor(
-            ufc[form]->A.data(), ufc[form]->w(), coordinate_dofs.data(), 1);
+            ufc[form]->A.data(), ufc[form]->w()[0], coordinate_dofs.data(), 1);
         for (std::size_t i = 0; i < data.Ae[form].size(); ++i)
           data.Ae[form][i] += ufc[form]->A[i];
       }
@@ -446,7 +436,7 @@ void SystemAssembler::cell_wise_assembly(
 
             // Tabulate exterior facet tensor
             exterior_facet_integrals[form]->tabulate_tensor(
-                ufc[form]->A.data(), ufc[form]->w(), coordinate_dofs.data(),
+                ufc[form]->A.data(), ufc[form]->w()[0], coordinate_dofs.data(),
                 local_facet, 1);
             for (std::size_t i = 0; i < data.Ae[form].size(); i++)
               data.Ae[form][i] += ufc[form]->A[i];
@@ -505,9 +495,7 @@ void SystemAssembler::facet_wise_assembly(
   dofmaps[1].push_back(ufc[1]->dolfin_form.function_space(0)->dofmap().get());
 
   // Cell dofmaps [form][cell][form dim]
-  std::array<
-      std::array<std::vector<common::ArrayView<const PetscInt>>, 2>,
-      2>
+  std::array<std::array<std::vector<common::ArrayView<const PetscInt>>, 2>, 2>
       cell_dofs;
   cell_dofs[0][0].resize(2);
   cell_dofs[0][1].resize(2);
@@ -560,7 +548,9 @@ void SystemAssembler::facet_wise_assembly(
   la::PETScVector* b = tensors.second;
 
   // Iterate over facets
-  std::array<EigenRowArrayXXd, 2> coordinate_dofs;
+  std::array<
+      Eigen::Array<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>, 2>
+      coordinate_dofs;
 
   for (auto& facet : mesh::MeshRange<mesh::Facet>(mesh))
   {
@@ -854,7 +844,8 @@ void SystemAssembler::facet_wise_assembly(
 //-----------------------------------------------------------------------------
 void SystemAssembler::compute_exterior_facet_tensor(
     std::array<std::vector<PetscScalar>, 2>& Ae, std::array<UFC*, 2>& ufc,
-    EigenRowArrayXXd& coordinate_dofs,
+    Eigen::Array<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>&
+        coordinate_dofs,
     const std::array<bool, 2>& tensor_required_cell,
     const std::array<bool, 2>& tensor_required_facet, const mesh::Cell& cell,
     const mesh::Facet& facet,
@@ -884,7 +875,7 @@ void SystemAssembler::compute_exterior_facet_tensor(
       ufc[form]->update(cell, coordinate_dofs,
                         exterior_facet_integrals[form]->enabled_coefficients);
       exterior_facet_integrals[form]->tabulate_tensor(
-          ufc[form]->A.data(), ufc[form]->w(), coordinate_dofs.data(),
+          ufc[form]->A.data(), ufc[form]->w()[0], coordinate_dofs.data(),
           local_facet, 1);
       for (std::size_t i = 0; i < Ae[form].size(); i++)
         Ae[form][i] += ufc[form]->A[i];
@@ -901,7 +892,7 @@ void SystemAssembler::compute_exterior_facet_tensor(
         ufc[form]->update(cell, coordinate_dofs,
                           cell_integrals[form]->enabled_coefficients);
         cell_integrals[form]->tabulate_tensor(
-            ufc[form]->A.data(), ufc[form]->w(), coordinate_dofs.data(), 1);
+            ufc[form]->A.data(), ufc[form]->w()[0], coordinate_dofs.data(), 1);
         for (std::size_t i = 0; i < Ae[form].size(); i++)
           Ae[form][i] += ufc[form]->A[i];
       }
@@ -910,7 +901,10 @@ void SystemAssembler::compute_exterior_facet_tensor(
 }
 //-----------------------------------------------------------------------------
 void SystemAssembler::compute_interior_facet_tensor(
-    std::array<UFC*, 2>& ufc, std::array<EigenRowArrayXXd, 2>& coordinate_dofs,
+    std::array<UFC*, 2>& ufc,
+    std::array<
+        Eigen::Array<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>,
+        2>& coordinate_dofs,
     const std::array<bool, 2>& tensor_required_cell,
     const std::array<bool, 2>& tensor_required_facet,
     const std::array<mesh::Cell, 2>& cell,
@@ -935,7 +929,7 @@ void SystemAssembler::compute_interior_facet_tensor(
                         interior_facet_integrals[form]->enabled_coefficients);
       // Integrate over facet
       interior_facet_integrals[form]->tabulate_tensor(
-          ufc[form]->macro_A.data(), ufc[form]->macro_w(),
+          ufc[form]->macro_A.data(), ufc[form]->macro_w()[0],
           coordinate_dofs[0].data(), coordinate_dofs[1].data(), local_facet[0],
           local_facet[1], 1, 1);
     }
@@ -951,7 +945,7 @@ void SystemAssembler::compute_interior_facet_tensor(
           ufc[form]->update(cell[c], coordinate_dofs[c],
                             cell_integrals[form]->enabled_coefficients);
           cell_integrals[form]->tabulate_tensor(ufc[form]->A.data(),
-                                                ufc[form]->w(),
+                                                ufc[form]->w()[0],
                                                 coordinate_dofs[c].data(), 1);
 
           // FIXME: Can the below two blocks be consolidated?
@@ -1086,9 +1080,8 @@ void SystemAssembler::apply_bc(
   }
 }
 //-----------------------------------------------------------------------------
-bool SystemAssembler::has_bc(
-    const DirichletBC::Map& boundary_values,
-    const common::ArrayView<const PetscInt>& dofs)
+bool SystemAssembler::has_bc(const DirichletBC::Map& boundary_values,
+                             const common::ArrayView<const PetscInt>& dofs)
 {
   // Loop over dofs and check if bc is applied
   for (auto dof = dofs.begin(); dof != dofs.end(); ++dof)

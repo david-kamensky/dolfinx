@@ -10,7 +10,6 @@
 #include <dolfin/nls/NewtonSolver.h>
 #include <dolfin/nls/NonlinearProblem.h>
 #include <dolfin/nls/OptimisationProblem.h>
-#include <dolfin/parameter/Parameters.h>
 #include <memory>
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
@@ -83,14 +82,19 @@ void nls(py::module& m)
 
   // dolfin::NewtonSolver
   py::class_<dolfin::nls::NewtonSolver,
-             std::shared_ptr<dolfin::nls::NewtonSolver>, PyNewtonSolver,
-             dolfin::common::Variable>(m, "NewtonSolver")
+             std::shared_ptr<dolfin::nls::NewtonSolver>, PyNewtonSolver>(
+      m, "NewtonSolver")
       .def(py::init([](const MPICommWrapper comm) {
-        return std::make_unique<dolfin::nls::NewtonSolver>(comm.get());
+        return std::make_unique<PyNewtonSolver>(comm.get());
       }))
       .def("solve", &dolfin::nls::NewtonSolver::solve)
       .def("converged", &PyPublicNewtonSolver::converged)
-      .def("update_solution", &PyPublicNewtonSolver::update_solution);
+      .def("update_solution", &PyPublicNewtonSolver::update_solution)
+      .def_readwrite("atol", &dolfin::nls::NewtonSolver::atol)
+      .def_readwrite("rtol", &dolfin::nls::NewtonSolver::rtol)
+      .def_readwrite("max_it", &dolfin::nls::NewtonSolver::max_it)
+      .def_readwrite("convergence_criterion",
+                     &dolfin::nls::NewtonSolver::convergence_criterion);
 
   // dolfin::NonlinearProblem 'trampoline' for overloading from
   // Python
@@ -118,7 +122,7 @@ void nls(py::module& m)
           "Tried to call pure virtual function dolfin::NonlinearProblem::F");
     }
 
-    void form(const dolfin::la::PETScVector& x) override
+    void form(dolfin::la::PETScVector& x) override
     {
       PYBIND11_OVERLOAD_INT(void, dolfin::nls::NonlinearProblem, "form", &x);
       return dolfin::nls::NonlinearProblem::form(x);

@@ -4,162 +4,30 @@
 //
 // SPDX-License-Identifier:    LGPL-3.0-or-later
 
-#include <petscis.h>
-
+#include "assemble_vector_impl.h"
 #include "DirichletBC.h"
 #include "Form.h"
 #include "GenericDofMap.h"
-#include "assemble_vector_impl.h"
 #include <dolfin/common/types.h>
 #include <dolfin/function/FunctionSpace.h>
 #include <dolfin/mesh/Cell.h>
 #include <dolfin/mesh/Mesh.h>
 #include <dolfin/mesh/MeshIterator.h>
+#include <petscsys.h>
 
 using namespace dolfin;
 using namespace dolfin::fem;
 
-//-----------------------------------------------------------------------------
-void fem::set_bc(Vec b, const Form& L,
-                 std::vector<std::shared_ptr<const DirichletBC>> bcs,
-                 double scale)
+namespace
 {
-  PetscInt local_size;
-  VecGetLocalSize(b, &local_size);
-  PetscScalar* values;
-  VecGetArray(b, &values);
-  Eigen::Map<Eigen::Array<PetscScalar, Eigen::Dynamic, 1>> vec(values,
-                                                               local_size);
-  set_bc(vec, L, bcs, scale);
-  VecRestoreArray(b, &values);
-}
-//-----------------------------------------------------------------------------
-void fem::set_bc(Eigen::Ref<Eigen::Array<PetscScalar, Eigen::Dynamic, 1>> b,
-                 const Form& L,
-                 std::vector<std::shared_ptr<const DirichletBC>> bcs,
-                 double scale)
-{
-  // FIXME: optimise this function
-
-  auto V = L.function_space(0);
-  Eigen::Array<PetscInt, Eigen::Dynamic, 1> indices;
-  Eigen::Array<PetscScalar, Eigen::Dynamic, 1> values;
-  for (std::size_t i = 0; i < bcs.size(); ++i)
-  {
-    assert(bcs[i]);
-    assert(bcs[i]->function_space());
-    if (V->contains(*bcs[i]->function_space()))
-    {
-      std::tie(indices, values) = bcs[i]->bcs();
-      for (Eigen::Index j = 0; j < indices.size(); ++j)
-      {
-        // FIXME: this check is because DirichletBC::dofs include ghosts
-        if (indices[j] < (PetscInt)b.size())
-          b[indices[j]] = scale * values[j];
-      }
-    }
-  }
-}
-//-----------------------------------------------------------------------------
-void fem::assemble_ghosted(
-    Vec b, const Form& L, const std::vector<std::shared_ptr<const Form>> a,
-    const std::vector<std::shared_ptr<const DirichletBC>> bcs, double scale)
-{
-
-  Vec b_local;
-  VecGhostGetLocalForm(b, &b_local);
-  // FIXME: should zeroing be an option?
-  // Zero vector
-  // VecSet(b_local, 0.0);
-  fem::assemble_local(b_local, L, a, bcs);
-
-  // Restore ghosted form and update local (owned) entries that are
-  // ghosts on other processes
-  VecGhostRestoreLocalForm(b, &b_local);
-
-  VecGhostUpdateBegin(b, ADD_VALUES, SCATTER_REVERSE);
-  VecGhostUpdateEnd(b, ADD_VALUES, SCATTER_REVERSE);
-
-  // Set boundary values (local only)
-  set_bc(b, L, bcs, scale);
-}
-//-----------------------------------------------------------------------------
-void fem::assemble_local(
-    Vec& b, const Form& L, const std::vector<std::shared_ptr<const Form>> a,
-    const std::vector<std::shared_ptr<const DirichletBC>> bcs)
-{
-  // FIXME: check that b is a local PETSc Vec
-
-  // Wrap local PETSc Vec as an Eigen vector
-  PetscInt size = 0;
-  VecGetSize(b, &size);
-  PetscScalar* b_array;
-  VecGetArray(b, &b_array);
-  Eigen::Map<Eigen::Array<PetscScalar, Eigen::Dynamic, 1>> bvec(b_array, size);
-
-  bvec.setZero();
-
-  //  Assemble and then modify for Dirichlet bcs  (b  <- b - A x_(bc))
-  assemble_eigen(bvec, L, a, bcs);
-
-  // Restore array
-  VecRestoreArray(b, &b_array);
-}
-//-----------------------------------------------------------------------------
-void fem::assemble_eigen(
-    Eigen::Ref<Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1>> b, const Form& L,
-    const std::vector<std::shared_ptr<const Form>> a,
-    std::vector<std::shared_ptr<const DirichletBC>> bcs)
-{
-  // if (b.empty())
-  //  init(b, L);
-
-  // Get mesh from form
-  assert(L.mesh());
-  const mesh::Mesh& mesh = *L.mesh();
-
-  const std::size_t tdim = mesh.topology().dim();
-  mesh.init(tdim);
-
-  // Collect pointers to dof maps
-  auto dofmap = L.function_space(0)->dofmap();
-
-  // Data structures used in assembly
-  EigenRowArrayXXd coordinate_dofs;
-  Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1> be;
-
-  // Iterate over all cells
-  for (auto& cell : mesh::MeshRange<mesh::Cell>(mesh))
-  {
-    // Check that cell is not a ghost
-    assert(!cell.is_ghost());
-
-    // Get cell vertex coordinates
-    cell.get_coordinate_dofs(coordinate_dofs);
-
-    // Get dof maps for cell
-    auto dmap = dofmap->cell_dofs(cell.index());
-
-    // Size data structure for assembly
-    be.resize(dmap.size());
-    be.setZero();
-
-    // Compute cell matrix
-    L.tabulate_tensor(be.data(), cell, coordinate_dofs);
-
-    // Add to vector
-    for (Eigen::Index i = 0; i < dmap.size(); ++i)
-      b[dmap[i]] += be[i];
-  }
-
-  // Modify for any bcs
-  for (std::size_t i = 0; i < a.size(); ++i)
-    fem::modify_bc(b, *a[i], bcs);
-}
-//-----------------------------------------------------------------------------
-void fem::modify_bc(Eigen::Ref<Eigen::Array<PetscScalar, Eigen::Dynamic, 1>> b,
-                    const Form& a,
-                    std::vector<std::shared_ptr<const DirichletBC>> bcs)
+// Implementation of bc application
+void _modify_bc(
+    Eigen::Ref<Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1>> b, const Form& a,
+    const Eigen::Ref<const Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1>>
+        bc_values1,
+    const std::vector<bool>& bc_markers1,
+    const Eigen::Ref<const Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1>> x0,
+    double scale)
 {
   assert(a.rank() == 2);
 
@@ -167,50 +35,36 @@ void fem::modify_bc(Eigen::Ref<Eigen::Array<PetscScalar, Eigen::Dynamic, 1>> b,
   assert(a.mesh());
   const mesh::Mesh& mesh = *a.mesh();
 
-  // Get bcs
-  DirichletBC::Map boundary_values;
-  for (std::size_t i = 0; i < bcs.size(); ++i)
-  {
-    assert(bcs[i]);
-    assert(bcs[i]->function_space());
-    if (a.function_space(1)->contains(*bcs[i]->function_space()))
-    {
-      bcs[i]->get_boundary_values(boundary_values);
-      if (MPI::size(mesh.mpi_comm()) > 1
-          and bcs[i]->method() != DirichletBC::Method::pointwise)
-      {
-        bcs[i]->gather(boundary_values);
-      }
-    }
-  }
+  // Get dofmap for columns and rows of a
+  assert(a.function_space(0));
+  assert(a.function_space(0)->dofmap());
+  assert(a.function_space(1));
+  assert(a.function_space(1)->dofmap());
+  const fem::GenericDofMap& dofmap0 = *a.function_space(0)->dofmap();
+  const fem::GenericDofMap& dofmap1 = *a.function_space(1)->dofmap();
 
-  // std::array<const function::FunctionSpace*, 2> spaces
-  //    = {{a.function_space(0).get(), a.function_space(1).get()}};
-
-  // Get dofmap for columns a a[i]
-  auto dofmap0 = a.function_space(0)->dofmap();
-  auto dofmap1 = a.function_space(1)->dofmap();
-
+  // Data structures used in bc application
   Eigen::Matrix<PetscScalar, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
       Ae;
   Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1> be;
-  EigenRowArrayXXd coordinate_dofs;
+  Eigen::Array<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
+      coordinate_dofs;
 
   // Iterate over all cells
-  for (auto& cell : mesh::MeshRange<mesh::Cell>(mesh))
+  for (const mesh::Cell& cell : mesh::MeshRange<mesh::Cell>(mesh))
   {
     // Check that cell is not a ghost
     assert(!cell.is_ghost());
 
     // Get dof maps for cell
-    auto dmap1 = dofmap1->cell_dofs(cell.index());
+    const Eigen::Map<const Eigen::Array<PetscInt, Eigen::Dynamic, 1>> dmap1
+        = dofmap1.cell_dofs(cell.index());
 
     // Check if bc is applied to cell
     bool has_bc = false;
-    for (int i = 0; i < dmap1.size(); ++i)
+    for (Eigen::Index j = 0; j < dmap1.size(); ++j)
     {
-      const std::size_t ii = dmap1[i];
-      if (boundary_values.find(ii) != boundary_values.end())
+      if (bc_markers1[dmap1[j]])
       {
         has_bc = true;
         break;
@@ -224,42 +78,100 @@ void fem::modify_bc(Eigen::Ref<Eigen::Array<PetscScalar, Eigen::Dynamic, 1>> b,
     cell.get_coordinate_dofs(coordinate_dofs);
 
     // Size data structure for assembly
-    auto dmap0 = dofmap0->cell_dofs(cell.index());
-    Ae.resize(dmap0.size(), dmap1.size());
-    Ae.setZero();
+    const Eigen::Map<const Eigen::Array<PetscInt, Eigen::Dynamic, 1>> dmap0
+        = dofmap0.cell_dofs(cell.index());
+    Ae.setZero(dmap0.size(), dmap1.size());
     a.tabulate_tensor(Ae.data(), cell, coordinate_dofs);
 
-    // FIXME: Is this required?
-    // Zero Dirichlet rows in Ae
-    /*
-    if (spaces[0] == spaces[1])
-    {
-      for (int i = 0; i < dmap0.size(); ++i)
-      {
-        const std::size_t ii = dmap0[i];
-        auto bc = boundary_values.find(ii);
-        if (bc != boundary_values.end())
-          Ae.row(i).setZero();
-      }
-    }
-    */
-
     // Size data structure for assembly
-    be.resize(dmap0.size());
-    be.setZero();
-
-    for (int j = 0; j < dmap1.size(); ++j)
+    be.setZero(dmap0.size());
+    for (Eigen::Index j = 0; j < dmap1.size(); ++j)
     {
-      const std::size_t jj = dmap1[j];
-      auto bc = boundary_values.find(jj);
-      if (bc != boundary_values.end())
+      const PetscInt jj = dmap1[j];
+      if (bc_markers1[jj])
       {
-        be -= Ae.col(j) * bc->second;
+        const PetscScalar bc = bc_values1[jj];
+        if (x0.rows() > 0)
+          be -= Ae.col(j) * scale * (bc - x0[jj]);
+        else
+          be -= Ae.col(j) * scale * bc;
       }
     }
 
     for (Eigen::Index k = 0; k < dmap0.size(); ++k)
       b[dmap0[k]] += be[k];
   }
+}
+} // namespace
+
+//-----------------------------------------------------------------------------
+void fem::impl::assemble(
+    Eigen::Ref<Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1>> b, const Form& L)
+{
+  // Get mesh from form
+  assert(L.mesh());
+  const mesh::Mesh& mesh = *L.mesh();
+
+  const std::size_t tdim = mesh.topology().dim();
+  mesh.init(tdim);
+
+  // Collect pointers to dof maps
+  assert(L.function_space(0));
+  assert(L.function_space(0)->dofmap());
+  const fem::GenericDofMap& dofmap = *L.function_space(0)->dofmap();
+
+  // Creat data structures used in assembly
+  Eigen::Array<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
+      coordinate_dofs;
+  Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1> be;
+
+  // Iterate over all cells
+  for (const mesh::Cell& cell : mesh::MeshRange<mesh::Cell>(mesh))
+  {
+    // Check that cell is not a ghost
+    assert(!cell.is_ghost());
+
+    // Get cell vertex coordinates
+    cell.get_coordinate_dofs(coordinate_dofs);
+
+    // Get dof maps for cell
+    const Eigen::Map<const Eigen::Array<PetscInt, Eigen::Dynamic, 1>> dmap
+        = dofmap.cell_dofs(cell.index());
+
+    // Size data structure for assembly
+    be.setZero(dmap.size());
+
+    // Compute local cell vector and add to global vector
+    L.tabulate_tensor(be.data(), cell, coordinate_dofs);
+    for (Eigen::Index i = 0; i < dmap.size(); ++i)
+      b[dmap[i]] += be[i];
+  }
+}
+//-----------------------------------------------------------------------------
+void fem::impl::modify_bc(
+    Eigen::Ref<Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1>> b, const Form& a,
+    const Eigen::Ref<const Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1>>
+        bc_values1,
+    const std::vector<bool>& bc_markers1, double scale)
+{
+  const Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1> x0(0);
+  _modify_bc(b, a, bc_values1, bc_markers1, x0, scale);
+}
+//-----------------------------------------------------------------------------
+void fem::impl::modify_bc(
+    Eigen::Ref<Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1>> b, const Form& a,
+    const Eigen::Ref<const Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1>>
+        bc_values1,
+    const std::vector<bool>& bc_markers1,
+    const Eigen::Ref<const Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1>> x0,
+    double scale)
+{
+  if (b.size() != x0.size())
+  {
+    throw std::runtime_error(
+        "Vector size mismatch in modification for boundary conditions.");
+  }
+
+  _modify_bc(b, a, bc_values1, bc_markers1, x0, scale);
 }
 //-----------------------------------------------------------------------------

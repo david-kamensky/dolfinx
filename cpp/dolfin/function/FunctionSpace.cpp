@@ -4,9 +4,10 @@
 //
 // SPDX-License-Identifier:    LGPL-3.0-or-later
 
-#include "Expression.h"
 #include "FunctionSpace.h"
+#include "Expression.h"
 #include "Function.h"
+#include <dolfin/common/IndexMap.h>
 #include <dolfin/common/types.h>
 #include <dolfin/common/utils.h>
 #include <dolfin/fem/CoordinateMapping.h>
@@ -217,7 +218,9 @@ void FunctionSpace::interpolate(la::PETScVector& expansion_coefficients,
   // Check that function ranks match
   if (_element->value_rank() != expr.value_rank())
   {
-    throw std::runtime_error("Rank of Expression " + std::to_string(expr.value_rank()) + " doesn't match the target space.");
+    throw std::runtime_error("Rank of Expression "
+                             + std::to_string(expr.value_rank())
+                             + " doesn't match the target space.");
   }
 
   // Check that function dims match
@@ -225,7 +228,8 @@ void FunctionSpace::interpolate(la::PETScVector& expansion_coefficients,
   {
     if (_element->value_dimension(i) != expr.value_dimension(i))
     {
-      throw std::runtime_error("Dimensions of Expression doesn't match the target space.");
+      throw std::runtime_error(
+          "Dimensions of Expression doesn't match the target space.");
     }
   }
 
@@ -251,35 +255,36 @@ FunctionSpace::sub(const std::vector<std::size_t>& component) const
   assert(_dofmap);
 
   // Check if sub space is already in the cache and not expired
-  auto subspace = _subspaces.find(component);
-  if (subspace != _subspaces.end())
-    if (auto s = subspace->second.lock())
+  auto subspace_it = _subspaces.find(component);
+  if (subspace_it != _subspaces.end())
+  {
+    if (auto s = subspace_it->second.lock())
       return s;
+  }
 
   // Extract sub-element
-  auto element = _element->extract_sub_element(component);
+  std::shared_ptr<fem::FiniteElement> element
+      = _element->extract_sub_element(component);
 
   // Extract sub dofmap
   std::shared_ptr<fem::GenericDofMap> dofmap(
       _dofmap->extract_sub_dofmap(component, *_mesh));
 
   // Create new sub space
-  auto new_sub_space = std::make_shared<FunctionSpace>(_mesh, element, dofmap);
+  auto sub_space = std::make_shared<FunctionSpace>(_mesh, element, dofmap);
 
   // Set root space id and component w.r.t. root
-  new_sub_space->_root_space_id = _root_space_id;
-  auto& new_component = new_sub_space->_component;
-  new_component.clear();
-  new_component.insert(new_component.end(), _component.begin(),
-                       _component.end());
-  new_component.insert(new_component.end(), component.begin(), component.end());
+  sub_space->_root_space_id = _root_space_id;
+  sub_space->_component = _component;
+  sub_space->_component.insert(sub_space->_component.end(), component.begin(),
+                               component.end());
 
   // Insert new subspace into cache
   _subspaces.insert(
       std::pair<std::vector<std::size_t>, std::shared_ptr<FunctionSpace>>(
-          component, new_sub_space));
+          sub_space->_component, sub_space));
 
-  return new_sub_space;
+  return sub_space;
 }
 //-----------------------------------------------------------------------------
 std::pair<std::shared_ptr<FunctionSpace>,

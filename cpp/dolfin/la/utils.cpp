@@ -1,4 +1,4 @@
-// Copyright (C) 2013-2018 Johan Hake, Jan Blechta and Garth N. Wells
+// Copyright (C) 2013-2019 Johan Hake, Jan Blechta and Garth N. Wells
 //
 // This file is part of DOLFIN (https://www.fenicsproject.org)
 //
@@ -20,15 +20,16 @@ std::vector<IS> dolfin::la::compute_index_sets(
   for (std::size_t i = 0; i < maps.size(); ++i)
   {
     assert(maps[i]);
-    // if (MPI::rank(MPI_COMM_WORLD) == 1)
-    //   std::cout << "CCC: " << i << ", " << maps[i]->size_local() << ", "
-    //             << maps[i]->num_ghosts() << std::endl;
     const int size = maps[i]->size_local() + maps[i]->num_ghosts();
-    std::vector<PetscInt> index(size);
+    const int bs = maps[i]->block_size();
+    std::vector<PetscInt> index(bs * size);
     std::iota(index.begin(), index.end(), offset);
-    ISCreateBlock(MPI_COMM_SELF, maps[i]->block_size(), index.size(),
-                  index.data(), PETSC_COPY_VALUES, &is[i]);
-    offset += size;
+    ISCreateBlock(MPI_COMM_SELF, 1, index.size(), index.data(),
+                  PETSC_COPY_VALUES, &is[i]);
+    // ISCreateBlock(MPI_COMM_SELF, bs, index.size(), index.data(),
+    //               PETSC_COPY_VALUES, &is[i]);
+    offset += bs*size;
+    // offset += size;
   }
 
   return is;
@@ -56,8 +57,68 @@ void dolfin::la::petsc_error(int error_code, std::string filename,
   dolfin::log::log(TRACE, std::string(78, '-'));
 
   // Raise exception with standard error message
-  dolfin::log::dolfin_error(
-      filename, "successfully call PETSc function '" + petsc_function + "'",
-      "PETSc error code is: %d (%s)", error_code, desc);
+  throw std::runtime_error("Failed to successfully call PETSc function '"
+                           + petsc_function + "'. PETSc error code is: "
+                           + std ::to_string(error_code) + ", "
+                           + std::string(desc));
+}
+//-----------------------------------------------------------------------------
+dolfin::la::VecWrapper::VecWrapper(Vec y, bool ghosted) : x(nullptr, 0), _y(y)
+{
+  assert(_y);
+  if (ghosted)
+    VecGhostGetLocalForm(_y, &_y_local);
+  else
+    VecGetLocalVector(_y, _y_local);
+
+  PetscInt n = 0;
+  VecGetSize(_y_local, &n);
+  VecGetArray(_y_local, &array);
+
+  new (&x) Eigen::Map<Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1>>(array, n);
+}
+//-----------------------------------------------------------------------------
+void dolfin::la::VecWrapper::restore()
+{
+  assert(_y_local);
+  VecRestoreArray(_y_local, &array);
+
+  PetscBool is_ghost_local_form;
+  assert(_y);
+  VecGhostIsLocalForm(_y, _y_local, &is_ghost_local_form);
+  if (is_ghost_local_form == PETSC_TRUE)
+    VecGhostRestoreLocalForm(_y, &_y_local);
+  else
+    VecRestoreLocalVector(_y, _y_local);
+}
+//-----------------------------------------------------------------------------
+dolfin::la::VecReadWrapper::VecReadWrapper(const Vec y, bool ghosted)
+    : x(nullptr, 0), _y(y)
+{
+  assert(_y);
+  if (ghosted)
+    VecGhostGetLocalForm(_y, &_y_local);
+  else
+    VecGetLocalVector(_y, _y_local);
+
+  PetscInt n = 0;
+  VecGetSize(_y_local, &n);
+  VecGetArrayRead(_y_local, &array);
+  new (&x)
+      Eigen::Map<const Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1>>(array, n);
+}
+//-----------------------------------------------------------------------------
+void dolfin::la::VecReadWrapper::restore()
+{
+  assert(_y_local);
+  VecRestoreArrayRead(_y_local, &array);
+
+  assert(_y);
+  PetscBool is_ghost_local_form;
+  VecGhostIsLocalForm(_y, _y_local, &is_ghost_local_form);
+  if (is_ghost_local_form == PETSC_TRUE)
+    VecGhostRestoreLocalForm(_y, &_y_local);
+  else
+    VecRestoreLocalVector(_y, _y_local);
 }
 //-----------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-// Copyright (C) 2018 Garth N. Wells
+// Copyright (C) 2018-2019 Garth N. Wells
 //
 // This file is part of DOLFIN (https://www.fenicsproject.org)
 //
@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include <Eigen/Dense>
+#include <petscmat.h>
 #include <vector>
 
 namespace dolfin
@@ -20,13 +20,17 @@ namespace fem
 {
 class Form;
 
-/// Assemble matrix, with Dirichlet rows/columns zeroed. The matrix A
-/// must already be initialised. The matrix may be a proxy, i.e. a view
-/// into a larger matrix, and assembly is performed using local indices.
-/// Matrix is not finalised.
-void assemble_matrix(la::PETScMatrix& A, const Form& a,
-                     const std::vector<std::int32_t>& bc_dofs0,
-                     const std::vector<std::int32_t>& bc_dofs1);
+namespace impl
+{
 
+/// The matrix A must already be initialised. The matrix may be a proxy,
+/// i.e. a view into a larger matrix, and assembly is performed using
+/// local indices. Rows (bc0) and columns (bc1) with Dirichlet
+/// conditions are zeroed. Markers (bc0 and bc1) can be empty if not bcs
+/// are applied. Matrix is not finalised.
+void assemble_matrix(Mat A, const Form& a, const std::vector<bool>& bc0,
+                     const std::vector<bool>& bc1);
+
+} // namespace impl
 } // namespace fem
 } // namespace dolfin
