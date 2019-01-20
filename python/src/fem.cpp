@@ -199,7 +199,8 @@ void fem(py::module& m)
         dolfin::fem::DirichletBC::Map map;
         instance.get_boundary_values(map);
         return map;
-      });
+      })
+      .def("value", &dolfin::fem::DirichletBC::value);
 
   py::enum_<dolfin::fem::BlockType>(
       m, "BlockType",
