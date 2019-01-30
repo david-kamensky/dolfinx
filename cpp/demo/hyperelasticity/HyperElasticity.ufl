@@ -11,7 +11,6 @@
 
 # Function spaces
 element = VectorElement("Lagrange", tetrahedron, 1)
-mesh = Mesh(element)
 
 # Trial and test functions
 du = TrialFunction(element)     # Incremental displacement
