@@ -12,6 +12,7 @@ import pytest
 from petsc4py import PETSc
 
 import dolfin
+import dolfin.mesh
 import ufl
 from ufl import dx, inner
 
