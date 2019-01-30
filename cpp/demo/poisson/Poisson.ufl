@@ -6,7 +6,8 @@
 # :download:`Poisson.ufl`.  We begin by defining the finite element::
 
 element = FiniteElement("Lagrange", triangle, 1)
-mesh = Mesh(element)
+mesh_element = VectorElement("Lagrange", triangle, 1, dim=2)
+mesh = Mesh(mesh_element)
 
 # The first argument to :py:class:`FiniteElement` is the finite element
 # family, the second argument specifies the domain, while the third
