@@ -12,6 +12,7 @@ import pytest
 from petsc4py import PETSc
 
 import dolfin
+import dolfin.io
 import ufl
 from ufl import ds, dx, inner
 
@@ -73,12 +74,89 @@ def test_basic_assembly():
         b_local.array[b.local_size:] = 0.0
     dolfin.fem.assemble_vector(b, L)
     b.ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)
-    assert 2.0 * normb == pytest.approx(b.norm())
 
+    assert 2.0 * normb == pytest.approx(b.norm())
     # Matrix re-assembly (no zeroing)
     dolfin.fem.assemble_matrix(A, a)
     A.assemble()
     assert 2.0 * normA == pytest.approx(A.norm())
+
+
+def test_exterior_facet_functional_assembly():
+    mesh = dolfin.generation.UnitSquareMesh(dolfin.MPI.comm_world, 12, 12)
+    x = ufl.SpatialCoordinate(mesh)
+
+    M = 1.0 * ds(domain=mesh)
+    value = dolfin.fem.assemble(M)
+    assert value == pytest.approx(4.0, rel=1e-12, abs=1e-12)
+
+    M = x[0] * ds(domain=mesh)
+    value = dolfin.fem.assemble(M)
+    assert value == pytest.approx(2.0, rel=1e-12, abs=1e-12)
+
+    M = x[0] * x[0] * ds(domain=mesh)
+    value = dolfin.fem.assemble(M)
+    assert value == pytest.approx(2.0/3.0 + 1.0, rel=1e-12, abs=1e-12)
+
+    M = x[0] * x[1] * ds(domain=mesh)
+    value = dolfin.fem.assemble(M)
+    assert value == pytest.approx(1.0, rel=1e-12, abs=1e-12)
+
+
+def xtest_exterior_facet_assembly():
+    mesh = dolfin.generation.UnitSquareMesh(dolfin.MPI.comm_world, 12, 12)
+    degree = 3
+    V = dolfin.FunctionSpace(mesh, ("Lagrange", degree))
+    u, v = dolfin.TrialFunction(V), dolfin.TestFunction(V)
+
+    x = ufl.SpatialCoordinate(mesh)
+
+    c0, c1, c2, c3 = 1.0, 1.0, 1.0, 1.0
+    u_exact = c0 + c1 * x[0] + c2 * x[0] * x[0] + c3 * x[0] * x[0] * x[0]
+    dudx = c1 + 2.0 * c2 * x[0] + 3.0 * c3 * x[0] * x[0]
+    d2udx2 = 2.0 * c2 + 6 * c3 * x[0]
+
+    f = - d2udx2
+    a = inner(ufl.grad(u), ufl.grad(v)) * dx
+    L = inner(f, v) * dx + inner(dudx, v) * ds(1)
+
+    def boundary(x):
+        return x[:, 0] < 1.0e-6
+
+    u_bc = dolfin.function.Function(V)
+    with u_bc.vector().localForm() as u_local:
+        u_local.set(c0)
+    bc = dolfin.fem.dirichletbc.DirichletBC(V, u_bc, boundary)
+    A = dolfin.fem.assemble_matrix(a, [bc])
+    A.assemble()
+
+    b = dolfin.fem.assemble_vector(L)
+    dolfin.fem.apply_lifting(b, [a], [[bc]])
+    b.ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)
+    dolfin.fem.set_bc(b, [bc])
+
+    # Solve
+    ksp = PETSc.KSP()
+    ksp.create(mesh.mpi_comm())
+    ksp.setOperators(A, A)
+    ksp.setType("preonly")
+    pc = ksp.getPC()
+    pc.setType("lu")
+    pc.setFactorSolverType('mumps')
+
+    u_h = dolfin.function.Function(V)
+    ksp.solve(b, u_h.vector())
+
+    # Evaluate at point
+    tree = dolfin.cpp.geometry.BoundingBoxTree(mesh, mesh.geometry.dim)
+    x = (0.5, 0.5)
+    u_exact = c0 + c1 * x[0] + c2 * x[0] * x[0] + c3 * x[0] * x[0] * x[0]
+
+    test = u_h(x, tree)
+    print(test, u_exact)
+
+    with dolfin.io.XDMFFile(mesh.mpi_comm(), "u.xdmf") as file:
+        file.write(u_h)
 
 
 def test_assembly_bcs():
@@ -106,7 +184,6 @@ def test_assembly_bcs():
     dolfin.fem.set_bc(f, [bc])
 
     # Assemble vector and apply lifting of bcs during assembly
-    b = dolfin.fem.assemble(L)
     b_bc = dolfin.fem.assemble_vector(L)
     dolfin.fem.apply_lifting(b_bc, [a], [[bc]])
     b_bc.ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)

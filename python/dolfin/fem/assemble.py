@@ -27,13 +27,13 @@ def assemble(M: typing.Union[Form, cpp.fem.Form]
 
     """
     _M = _create_cpp_form(M)
-    if _M.rank() == 0:
+    if _M.rank == 0:
         return cpp.fem.assemble_scalar(_M)
-    elif _M.rank() == 1:
+    elif _M.rank == 1:
         b = cpp.la.create_vector(_M.function_space(0).dofmap().index_map())
         assemble(b, _M)
         return b
-    elif _M.rank() == 2:
+    elif _M.rank == 2:
         A = cpp.fem.create_matrix(_M)
         assemble(A, _M)
         return A
