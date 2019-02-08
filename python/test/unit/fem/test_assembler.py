@@ -7,7 +7,7 @@
 
 import math
 
-import numpy
+import numpy as np
 import pytest
 from petsc4py import PETSc
 
@@ -82,23 +82,41 @@ def test_basic_assembly():
     assert 2.0 * normA == pytest.approx(A.norm())
 
 
-def test_exterior_facet_functional_assembly():
+def xtest_exterior_facet_functional_assembly():
     mesh = dolfin.generation.UnitSquareMesh(dolfin.MPI.comm_world, 12, 12)
+    x = numpy.array([[0.0, 0.0],
+                     [0.2, 0.0],
+                     [0.8, 0.0],
+                     [1.0, 0.0]],
+                     [0.0, 0.3],
+                     [0.2, 0.3],
+                     [0.8, 0.3],
+                     [1.0, 0.3],
+                     [0.0, 0.8],
+                     [0.2, 0.8],
+                     [0.8, 0.8],
+                     [1.0, 0.8]],
+                     [0.0, 1.0],
+                     [0.2, 1.0],
+                     [0.8, 1.0],
+                     [1.0, 1.0]]
+                     dtype=numpy.float64),
+
     x = ufl.SpatialCoordinate(mesh)
 
     M = 1.0 * ds(domain=mesh)
     value = dolfin.fem.assemble(M)
     assert value == pytest.approx(4.0, rel=1e-12, abs=1e-12)
 
-    M = x[0] * ds(domain=mesh)
+    M = x[0] * ds
     value = dolfin.fem.assemble(M)
     assert value == pytest.approx(2.0, rel=1e-12, abs=1e-12)
 
-    M = x[0] * x[0] * ds(domain=mesh)
+    M = x[0] * x[0] * ds
     value = dolfin.fem.assemble(M)
-    assert value == pytest.approx(2.0/3.0 + 1.0, rel=1e-12, abs=1e-12)
+    assert value == pytest.approx(2.0 / 3.0 + 1.0, rel=1e-12, abs=1e-12)
 
-    M = x[0] * x[1] * ds(domain=mesh)
+    M = x[0] * x[1] * ds
     value = dolfin.fem.assemble(M)
     assert value == pytest.approx(1.0, rel=1e-12, abs=1e-12)
 
@@ -167,7 +185,7 @@ def test_assembly_bcs():
     L = inner(1.0, v) * dx
 
     def boundary(x):
-        return numpy.logical_or(x[:, 0] < 1.0e-6, x[:, 0] > 1.0 - 1.0e-6)
+        return np.logical_or(x[:, 0] < 1.0e-6, x[:, 0] > 1.0 - 1.0e-6)
 
     u_bc = dolfin.function.Function(V)
     with u_bc.vector().localForm() as u_local:
@@ -206,7 +224,7 @@ def test_matrix_assembly_block():
     V1 = dolfin.function.functionspace.FunctionSpace(mesh, P1)
 
     def boundary(x):
-        return numpy.logical_or(x[:, 0] < 1.0e-6, x[:, 0] > 1.0 - 1.0e-6)
+        return np.logical_or(x[:, 0] < 1.0e-6, x[:, 0] > 1.0 - 1.0e-6)
 
     u_bc = dolfin.function.Function(V1)
     with u_bc.vector().localForm() as u_local:
@@ -281,7 +299,7 @@ def test_assembly_solve_block():
     V1 = dolfin.function.functionspace.FunctionSpace(mesh, P1)
 
     def boundary(x):
-        return numpy.logical_or(x[:, 0] < 1.0e-6, x[:, 0] > 1.0 - 1.0e-6)
+        return np.logical_or(x[:, 0] < 1.0e-6, x[:, 0] > 1.0 - 1.0e-6)
 
     u_bc0 = dolfin.function.Function(V0)
     u_bc0.vector().set(50.0)
@@ -414,11 +432,11 @@ def test_assembly_solve_taylor_hood(mesh):
 
     def boundary0(x):
         """Define boundary x = 0"""
-        return x[:, 0] < 10 * numpy.finfo(float).eps
+        return x[:, 0] < 10 * np.finfo(float).eps
 
     def boundary1(x):
         """Define boundary x = 1"""
-        return x[:, 0] > (1.0 - 10 * numpy.finfo(float).eps)
+        return x[:, 0] > (1.0 - 10 * np.finfo(float).eps)
 
     u0 = dolfin.Function(P2)
     u0.vector().set(1.0)
