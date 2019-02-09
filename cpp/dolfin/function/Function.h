@@ -10,8 +10,10 @@
 #include <dolfin/common/Variable.h>
 #include <dolfin/common/types.h>
 #include <dolfin/fem/FiniteElement.h>
+#include <dolfin/la/PETScVector.h>
 #include <memory>
 #include <petscsys.h>
+#include <petscvec.h>
 #include <vector>
 
 namespace dolfin
@@ -20,10 +22,6 @@ namespace dolfin
 namespace geometry
 {
 class BoundingBoxTree;
-}
-namespace la
-{
-class PETScVector;
 }
 namespace mesh
 {
@@ -46,8 +44,6 @@ class FunctionSpace;
 class Function : public common::Variable
 {
 public:
-  Function() {}
-
   /// Create function on given function space
   ///
   /// @param V (_FunctionSpace_)
@@ -60,10 +56,9 @@ public:
   ///
   /// @param V (_FunctionSpace_)
   ///         The function space.
-  /// @param x (_GenericVector_)
+  /// @param x (_Vec_)
   ///         The vector.
-  Function(std::shared_ptr<const FunctionSpace> V,
-           std::shared_ptr<la::PETScVector> x);
+  Function(std::shared_ptr<const FunctionSpace> V, Vec x);
 
   /// Copy constructor
   ///
@@ -80,12 +75,6 @@ public:
 
   /// Destructor
   virtual ~Function() = default;
-
-  // Assignment from function
-  //
-  // @param v (_Function_)
-  //         Another function.
-  // const Function& operator= (const Function& v);
 
   /// Extract subfunction (view into the Function)
   ///
@@ -109,13 +98,13 @@ public:
   ///
   /// @returns  _PETScVector_
   ///         The vector of expansion coefficients.
-  std::shared_ptr<la::PETScVector> vector();
+  la::PETScVector& vector();
 
   /// Return vector of expansion coefficients (const version)
   ///
   /// @returns _PETScVector_
   ///         The vector of expansion coefficients (const).
-  std::shared_ptr<const la::PETScVector> vector() const;
+  const la::PETScVector& vector() const;
 
   /// Interpolate function (on possibly non-matching meshes)
   ///
@@ -198,8 +187,7 @@ public:
   /// @param  coordinate_dofs (double *)
   ///         The coordinates
   void
-  restrict(PetscScalar* w, const fem::FiniteElement& element,
-           const mesh::Cell& cell,
+  restrict(PetscScalar* w, const mesh::Cell& cell,
            const Eigen::Ref<const EigenRowArrayXXd>& coordinate_dofs) const;
 
   /// Compute values at all mesh points
@@ -219,14 +207,14 @@ public:
   compute_point_values() const;
 
 private:
-  // Initialize vector
-  void init_vector();
+  // Create vector
+  static la::PETScVector _create_vector(const function::FunctionSpace& V);
 
   // The function space
   std::shared_ptr<const FunctionSpace> _function_space;
 
   // The vector of expansion coefficients (local)
-  std::shared_ptr<la::PETScVector> _vector;
+  la::PETScVector _vector;
 };
 } // namespace function
 } // namespace dolfin

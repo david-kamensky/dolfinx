@@ -214,7 +214,7 @@ void PETScDMCollection::reset(int i)
   //  PetscObjectDereference((PetscObject)_dms[i]);
 }
 //-----------------------------------------------------------------------------
-std::shared_ptr<la::PETScMatrix> PETScDMCollection::create_transfer_matrix(
+la::PETScMatrix PETScDMCollection::create_transfer_matrix(
     const function::FunctionSpace& coarse_space,
     const function::FunctionSpace& fine_space)
 {
@@ -628,13 +628,7 @@ std::shared_ptr<la::PETScMatrix> PETScDMCollection::create_transfer_matrix(
   ierr = MatAssemblyEnd(I, MAT_FINAL_ASSEMBLY);
   CHKERRABORT(PETSC_COMM_WORLD, ierr);
 
-  // create shared pointer and return the pointer to the transfer
-  // matrix
-  std::shared_ptr<la::PETScMatrix> ptr = std::make_shared<la::PETScMatrix>(I);
-  ierr = MatDestroy(&I);
-  CHKERRABORT(PETSC_COMM_WORLD, ierr);
-
-  return ptr;
+  return la::PETScMatrix(I, false);
 }
 //-----------------------------------------------------------------------------
 void PETScDMCollection::find_exterior_points(
@@ -741,7 +735,7 @@ PetscErrorCode PETScDMCollection::create_global_vector(DM dm, Vec* vec)
 
   // Create Vector
   function::Function u(*V);
-  *vec = u.vector()->vec();
+  *vec = u.vector().vec();
 
   // FIXME: Does increasing the reference count lead to a memory leak?
   // Increment PETSc reference counter the Vec
@@ -762,9 +756,9 @@ PetscErrorCode PETScDMCollection::create_interpolation(DM dmc, DM dmf, Mat* mat,
   // Build interpolation matrix (V0 to V1)
   assert(V0);
   assert(V1);
-  std::shared_ptr<la::PETScMatrix> P = create_transfer_matrix(*V0, *V1);
+  auto P = std::make_shared<la::PETScMatrix>(create_transfer_matrix(*V0, *V1));
 
-  // Copy PETSc matrix pointer and inrease reference count
+  // Copy PETSc matrix pointer and increase reference count
   *mat = P->mat();
   PetscObjectReference((PetscObject)*mat);
 

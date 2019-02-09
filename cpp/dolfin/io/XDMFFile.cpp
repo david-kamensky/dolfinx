@@ -21,6 +21,7 @@
 #include <dolfin/function/Function.h>
 #include <dolfin/function/FunctionSpace.h>
 #include <dolfin/la/PETScVector.h>
+#include <dolfin/la/utils.h>
 #include <dolfin/mesh/Cell.h>
 #include <dolfin/mesh/DistributedMeshTools.h>
 #include <dolfin/mesh/Edge.h>
@@ -32,6 +33,7 @@
 #include <dolfin/mesh/Vertex.h>
 #include <iomanip>
 #include <memory>
+#include <petscvec.h>
 #include <set>
 #include <string>
 #include <vector>
@@ -1348,10 +1350,18 @@ void XDMFFile::add_function(MPI_Comm mpi_comm, pugi::xml_node& xml_node,
   add_data_item(mpi_comm, fe_attribute_node, h5_id, h5_path + "/cell_dofs",
                 cell_dofs, {num_cell_dofs_global, 1}, "UInt");
 
+  // FIXME: Avoid unnecessary copying of data
   // Get all local data
-  const la::PETScVector& u_vector = *u.vector();
-  std::vector<PetscScalar> local_data;
-  u_vector.get_local(local_data);
+  const la::PETScVector& u_vector = u.vector();
+  PetscErrorCode ierr;
+  const PetscScalar* u_ptr = nullptr;
+  ierr = VecGetArrayRead(u_vector.vec(), &u_ptr);
+  if (ierr != 0)
+    la::petsc_error(ierr, __FILE__, "VecGetArrayRead");
+  std::vector<PetscScalar> local_data(u_ptr, u_ptr + u_vector.local_size());
+  ierr = VecRestoreArrayRead(u_vector.vec(), &u_ptr);
+  if (ierr != 0)
+    la::petsc_error(ierr, __FILE__, "VecRestoreArrayRead");
 
 #ifdef PETSC_USE_COMPLEX
   // FIXME: Avoid copies by writing directly a compound data
@@ -1670,8 +1680,7 @@ XDMFFile::read_checkpoint(std::shared_ptr<const function::FunctionSpace> V,
 #endif
 
   function::Function u(V);
-  assert(u.vector());
-  HDF5Utility::set_local_vector_values(_mpi_comm.comm(), *u.vector(), mesh,
+  HDF5Utility::set_local_vector_values(_mpi_comm.comm(), u.vector(), mesh,
                                        cells, cell_dofs, x_cell_dofs, vector,
                                        input_vector_range, dofmap);
 
@@ -2016,11 +2025,15 @@ XDMFFile::get_cell_type(const pugi::xml_node& topology_node)
   pugi::xml_attribute type_attr = topology_node.attribute("TopologyType");
   assert(type_attr);
 
-  const std::map<std::string, std::pair<std::string, int>> xdmf_to_dolfin = {
-      {"polyvertex", {"point", 1}},    {"polyline", {"interval", 1}},
-      {"edge_3", {"interval", 2}},     {"triangle", {"triangle", 1}},
-      {"triangle_6", {"triangle", 2}}, {"tetrahedron", {"tetrahedron", 1}},
-      {"tetrahedron_10", {"tetrahedron", 2}},  {"quadrilateral", {"quadrilateral", 1}}};
+  const std::map<std::string, std::pair<std::string, int>> xdmf_to_dolfin
+      = {{"polyvertex", {"point", 1}},
+         {"polyline", {"interval", 1}},
+         {"edge_3", {"interval", 2}},
+         {"triangle", {"triangle", 1}},
+         {"triangle_6", {"triangle", 2}},
+         {"tetrahedron", {"tetrahedron", 1}},
+         {"tetrahedron_10", {"tetrahedron", 2}},
+         {"quadrilateral", {"quadrilateral", 1}}};
 
   // Convert XDMF cell type string to DOLFIN cell type string
   std::string cell_type = type_attr.as_string();
@@ -2690,7 +2703,6 @@ std::vector<PetscScalar>
 XDMFFile::get_cell_data_values(const function::Function& u)
 {
   assert(u.function_space()->dofmap());
-  assert(u.vector());
 
   const auto mesh = u.function_space()->mesh();
   const std::size_t value_size = u.value_size();
@@ -2717,8 +2729,13 @@ XDMFFile::get_cell_data_values(const function::Function& u)
 
   // Get  values
   std::vector<PetscScalar> data_values(dof_set.size());
-  assert(u.vector());
-  u.vector()->get_local(data_values.data(), dof_set.size(), dof_set.data());
+  {
+    la::VecReadWrapper u_wrapper(u.vector().vec());
+    Eigen::Map<const Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1>> x
+        = u_wrapper.x;
+    for (std::size_t i = 0; i < dof_set.size(); ++i)
+      data_values[i] = x[dof_set[i]];
+  }
 
   if (value_rank == 1 && value_size == 2)
   {
@@ -2857,8 +2874,13 @@ XDMFFile::get_p2_data_values(const function::Function& u)
     }
 
     // Get the values at the vertex points
-    const la::PETScVector& uvec = *u.vector();
-    uvec.get_local(data_values.data(), data_dofs.size(), data_dofs.data());
+    {
+      la::VecReadWrapper u_wrapper(u.vector().vec());
+      Eigen::Map<const Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1>> x
+          = u_wrapper.x;
+      for (std::size_t i = 0; i < data_dofs.size(); ++i)
+        data_values[i] = x[data_dofs[i]];
+    }
 
     // Get midpoint values for  mesh::Edge points
     for (auto& e : mesh::MeshRange<mesh::Edge>(*mesh))
@@ -2896,14 +2918,17 @@ XDMFFile::get_p2_data_values(const function::Function& u)
       }
     }
 
-    const la::PETScVector& uvec = *u.vector();
-    uvec.get_local(data_values.data(), data_dofs.size(), data_dofs.data());
+    la::VecReadWrapper u_wrapper(u.vector().vec());
+    Eigen::Map<const Eigen::Matrix<PetscScalar, Eigen::Dynamic, 1>> x
+        = u_wrapper.x;
+    for (std::size_t i = 0; i < data_dofs.size(); ++i)
+      data_values[i] = x[data_dofs[i]];
   }
   else
   {
-    log::dolfin_error("XDMFFile.cpp", "get point values for function::Function",
-                      "Function appears not to be defined on a P1 or P2 type "
-                      "function::FunctionSpace");
+    throw std::runtime_error(
+        "Cannotget point values for function::Function. Function appears not "
+        "to be defined on a P1 or P2 type function::FunctionSpace");
   }
 
   // Blank out empty values of 2D vector and tensor

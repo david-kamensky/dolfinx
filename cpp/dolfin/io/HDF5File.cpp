@@ -13,12 +13,12 @@
 #include <cstdio>
 #include <dolfin/common/MPI.h>
 #include <dolfin/common/Timer.h>
-#include <dolfin/common/constants.h>
 #include <dolfin/fem/GenericDofMap.h>
 #include <dolfin/function/Function.h>
 #include <dolfin/function/FunctionSpace.h>
 #include <dolfin/geometry/Point.h>
 #include <dolfin/la/PETScVector.h>
+#include <dolfin/la/utils.h>
 #include <dolfin/log/log.h>
 #include <dolfin/mesh/Cell.h>
 #include <dolfin/mesh/Mesh.h>
@@ -30,6 +30,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <petscvec.h>
 #include <string>
 
 using namespace dolfin;
@@ -132,15 +133,22 @@ void HDF5File::write(const la::PETScVector& x, const std::string dataset_name)
   assert(_hdf5_file_id > 0);
 
   // Get all local data
-  std::vector<PetscScalar> local_data;
-  x.get_local(local_data);
+  PetscErrorCode ierr;
+  const PetscScalar* x_ptr = nullptr;
+  ierr = VecGetArrayRead(x.vec(), &x_ptr);
+  if (ierr != 0)
+    la::petsc_error(ierr, __FILE__, "VecGetArrayRead");
 
   // Write data to file
   const auto local_range = x.local_range();
   const std::vector<std::int64_t> global_size(1, x.size());
   const bool mpi_io = _mpi_comm.size() > 1 ? true : false;
-  HDF5Interface::write_dataset(_hdf5_file_id, dataset_name, local_data.data(),
-                               local_range, global_size, mpi_io, chunking);
+  HDF5Interface::write_dataset(_hdf5_file_id, dataset_name, x_ptr, local_range,
+                               global_size, mpi_io, chunking);
+
+  ierr = VecRestoreArrayRead(x.vec(), &x_ptr);
+  if (ierr != 0)
+    la::petsc_error(ierr, __FILE__, "VecRestoreArrayRead");
 
   // Add partitioning attribute to dataset
   std::vector<std::size_t> partitions;
@@ -182,7 +190,7 @@ la::PETScVector HDF5File::read_vector(MPI_Comm comm,
          or (data_shape.size() == 2 and data_shape[1] == 1));
 
   // Initialize vector
-  la::PETScVector x;
+  std::array<std::int64_t, 2> range;
   if (use_partition_from_file)
   {
     // Get partition from file
@@ -202,17 +210,15 @@ la::PETScVector HDF5File::read_vector(MPI_Comm comm,
 
     // Initialise vector
     const std::size_t process_num = _mpi_comm.rank();
-    x = la::PETScVector(comm,
-                        {{(std::int64_t)partitions[process_num],
-                          (std::int64_t)partitions[process_num + 1]}},
-                        Eigen::Array<PetscInt, Eigen::Dynamic, 1>(), 1);
+    range = {{(std::int64_t)partitions[process_num],
+              (std::int64_t)partitions[process_num + 1]}};
   }
   else
   {
-    std::array<std::int64_t, 2> local_range
-        = MPI::local_range(comm, data_shape[0]);
-    x = la::PETScVector(comm, local_range, {}, 1);
+    range = MPI::local_range(comm, data_shape[0]);
   }
+  Eigen::Array<PetscInt, Eigen::Dynamic, 1> ghosts;
+  la::PETScVector x(comm, range, ghosts, 1);
 
   // Get local range
   const std::array<std::int64_t, 2> local_range = x.local_range();
@@ -222,8 +228,15 @@ la::PETScVector HDF5File::read_vector(MPI_Comm comm,
       _hdf5_file_id, dataset_name, local_range);
 
   // Set data
-  x.set_local(data);
-  x.apply();
+  PetscErrorCode ierr;
+  PetscScalar* x_ptr = nullptr;
+  ierr = VecGetArray(x.vec(), &x_ptr);
+  if (ierr != 0)
+    la::petsc_error(ierr, __FILE__, "VecGetArray");
+  std::copy(data.begin(), data.end(), x_ptr);
+  ierr = VecRestoreArray(x.vec(), &x_ptr);
+  if (ierr != 0)
+    la::petsc_error(ierr, __FILE__, "VecRestoreArray");
 
   return x;
 }
@@ -797,7 +810,7 @@ void HDF5File::write(const function::Function& u, const std::string name,
     HDF5Interface::add_attribute(_hdf5_file_id, name, "count", vec_count);
 
     // Write new vector and save timestamp
-    write(*u.vector(), vec_name);
+    write(u.vector(), vec_name);
     if (HDF5Interface::has_attribute(_hdf5_file_id, vec_name, "timestamp"))
       HDF5Interface::delete_attribute(_hdf5_file_id, vec_name, "timestamp");
     HDF5Interface::add_attribute(_hdf5_file_id, vec_name, "timestamp",
@@ -873,7 +886,7 @@ void HDF5File::write(const function::Function& u, const std::string name)
                                u.function_space()->element()->signature());
 
   // Save vector
-  write(*u.vector(), name + "/vector_0");
+  write(u.vector(), name + "/vector_0");
 }
 //-----------------------------------------------------------------------------
 function::Function
@@ -991,7 +1004,7 @@ HDF5File::read(std::shared_ptr<const function::FunctionSpace> V,
       _hdf5_file_id, cell_dofs_dataset_name,
       {{x_cell_dofs.front(), x_cell_dofs.back()}});
 
-  la::PETScVector& x = *u.vector();
+  la::PETScVector& x = u.vector();
 
   const std::vector<std::int64_t> vector_shape
       = HDF5Interface::get_dataset_shape(_hdf5_file_id, vector_dataset_name);

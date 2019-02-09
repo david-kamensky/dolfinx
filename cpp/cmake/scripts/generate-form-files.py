@@ -17,12 +17,12 @@
 """Recompile all forms. This script should be run from the top level C++ directory."""
 
 import os
-
-from petsc4py import PETSc
+import sys
 
 import ffc
 
-complex_mode = "complex" in str(type(PETSc.ScalarType()))
+# Call with "./generate-form-files.py 1" for PETSc complex mode
+complex_mode = (sys.argv[-1] == "1")
 
 # UFL files to skip
 skip = set()
@@ -46,7 +46,7 @@ for subdir in subdirs:
         os.chdir(root)
         print("Compiling %d forms in %s..." % (len(formfiles), root))
         for f in set(formfiles) - skip:
-            args = ["-l", "dolfin"]
+            args = []
             if complex_mode:
                 args += ["-f", "scalar_type", "double complex"]
             args.append(f)

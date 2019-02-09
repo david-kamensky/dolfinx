@@ -13,15 +13,13 @@ import sys
 import pytest
 
 # Get directory of this file
-dir_path = pathlib.Path(__file__).resolve().parent
+path = pathlib.Path(__file__).resolve().parent
 
 # Build list of demo programs
 demos = []
-for subdir in ['documented', 'undocumented']:
-    p = pathlib.Path(dir_path, subdir)
-    demo_files = list(p.glob('**/*.py'))
-    for f in demo_files:
-        demos.append((f.parent, f.name))
+demo_files = list(path.glob('**/*.py'))
+for f in demo_files:
+    demos.append((f.parent, f.name))
 
 
 @pytest.mark.serial
@@ -29,7 +27,7 @@ for subdir in ['documented', 'undocumented']:
 def test_demos(path, name):
     ret = subprocess.run([sys.executable, name],
                          cwd=str(path),
-                         env={**os.environ, 'MPLBACKEND': 'agg', 'DOLFIN_TEST': '1'},
+                         env={**os.environ, 'MPLBACKEND': 'agg'},
                          check=True)
     assert ret.returncode == 0
 
@@ -41,6 +39,6 @@ def test_demos_mpi(num_proc, mpiexec, path, name):
     print(cmd)
     ret = subprocess.run(cmd,
                          cwd=str(path),
-                         env={**os.environ, 'MPLBACKEND': 'agg', 'DOLFIN_TEST': '1'},
+                         env={**os.environ, 'MPLBACKEND': 'agg'},
                          check=True)
     assert ret.returncode == 0
