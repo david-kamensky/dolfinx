@@ -82,14 +82,31 @@ def test_basic_assembly():
     assert 2.0 * normA == pytest.approx(A.norm())
 
 
-def xtest_exterior_facet_functional_assembly():
-    mesh = dolfin.generation.UnitSquareMesh(dolfin.MPI.comm_world, 12, 12)
-    x = np.array([[0.0, 0.0], [0.2, 0.0], [0.8, 0.0], [1.0, 0.0], [0.0, 0.3],
-                  [0.2, 0.3], [0.8, 0.3], [1.0, 0.3], [0.0, 0.8], [0.2, 0.8],
-                  [0.8, 0.8], [1.0, 0.8], [0.0, 1.0], [0.2, 1.0], [0.8, 1.0],
-                  [1.0, 1.0]],
-                 dtype=np.float64),
+def test_exterior_facet_functional_assembly():
+    x = np.array([[0.0, 0.0], [1/3, 0.0], [2/3, 0.0], [1.0, 0.0], [0.0, 1/3],
+                  [1/3, 1/3], [2/3, 1/3], [1.0, 1/3], [0.0, 2/3], [1/3, 2/3],
+                  [2/3, 2/3], [1.0, 2/3],
+                  [0.0, 1.0], [1/3, 1.0], [2/3, 1.0], [1.0, 1.0]
+                  ],
+                 dtype=np.float64)
+    # x = np.array([[0.0, 0.0], [0.2, 0.0], [0.8, 0.0], [1.0, 0.0], [0.0, 0.3],
+    #               [0.2, 0.3], [0.8, 0.3], [1.0, 0.3], [0.0, 0.8], [0.2, 0.8],
+    #               [0.8, 0.8], [1.0, 0.8],
+    #               [0.0, 1.0], [0.2, 1.0], [0.8, 1.0], [1.0, 1.0]
+    #               ],
+    #              dtype=np.float64)
+    cells = np.array(
+        [[0, 1, 5], [0, 5, 4], [1, 2, 6], [1, 6, 5], [2, 3, 7], [2, 7, 6],
+        [4, 5, 9], [4, 9, 8], [5, 6, 10], [5, 10, 9], [6, 7, 11], [6, 11, 10],
+        [8, 9, 13], [8, 13, 12], [9, 10, 14], [9, 14, 13], [10, 11, 15], [10, 15, 14]
+        ],
+        dtype=np.int32)
+    mesh = dolfin.cpp.mesh.Mesh(dolfin.MPI.comm_world,
+                                dolfin.cpp.mesh.CellType.Type.triangle, x,
+                                cells, [], dolfin.cpp.mesh.GhostMode.none)
 
+    with dolfin.io.XDMFFile(mesh.mpi_comm(), "mesh.xdmf") as file:
+        file.write(mesh)
     x = ufl.SpatialCoordinate(mesh)
 
     M = 1.0 * ds(domain=mesh)
@@ -107,6 +124,22 @@ def xtest_exterior_facet_functional_assembly():
     M = x[0] * x[1] * ds
     value = dolfin.fem.assemble(M)
     assert value == pytest.approx(1.0, rel=1e-12, abs=1e-12)
+
+    degree = 1
+    V = dolfin.FunctionSpace(mesh, ("Lagrange", degree))
+    v = dolfin.TestFunction(V)
+    L = inner(1.0, v) * ds
+    b = dolfin.fem.assemble_vector(L)
+    b.ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)
+    print("bnorm:", b.norm())
+
+    mesh = dolfin.generation.UnitSquareMesh(dolfin.MPI.comm_world, 3, 3)
+    V = dolfin.FunctionSpace(mesh, ("Lagrange", degree))
+    v = dolfin.TestFunction(V)
+    L = inner(1.0, v) * ds
+    b = dolfin.fem.assemble_vector(L)
+    b.ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)
+    print("bnorm:", b.norm())
 
 
 def xtest_exterior_facet_assembly():
