@@ -84,23 +84,11 @@ def test_basic_assembly():
 
 def xtest_exterior_facet_functional_assembly():
     mesh = dolfin.generation.UnitSquareMesh(dolfin.MPI.comm_world, 12, 12)
-    x = numpy.array([[0.0, 0.0],
-                     [0.2, 0.0],
-                     [0.8, 0.0],
-                     [1.0, 0.0]],
-                     [0.0, 0.3],
-                     [0.2, 0.3],
-                     [0.8, 0.3],
-                     [1.0, 0.3],
-                     [0.0, 0.8],
-                     [0.2, 0.8],
-                     [0.8, 0.8],
-                     [1.0, 0.8]],
-                     [0.0, 1.0],
-                     [0.2, 1.0],
-                     [0.8, 1.0],
-                     [1.0, 1.0]]
-                     dtype=numpy.float64),
+    x = np.array([[0.0, 0.0], [0.2, 0.0], [0.8, 0.0], [1.0, 0.0], [0.0, 0.3],
+                  [0.2, 0.3], [0.8, 0.3], [1.0, 0.3], [0.0, 0.8], [0.2, 0.8],
+                  [0.8, 0.8], [1.0, 0.8], [0.0, 1.0], [0.2, 1.0], [0.8, 1.0],
+                  [1.0, 1.0]],
+                 dtype=np.float64),
 
     x = ufl.SpatialCoordinate(mesh)
 
@@ -134,7 +122,7 @@ def xtest_exterior_facet_assembly():
     dudx = c1 + 2.0 * c2 * x[0] + 3.0 * c3 * x[0] * x[0]
     d2udx2 = 2.0 * c2 + 6 * c3 * x[0]
 
-    f = - d2udx2
+    f = -d2udx2
     a = inner(ufl.grad(u), ufl.grad(v)) * dx
     L = inner(f, v) * dx + inner(dudx, v) * ds(1)
 
