@@ -14,6 +14,9 @@ from petsc4py import PETSc
 import dolfin
 import ufl
 from ufl import ds, dx, inner
+import ffc
+
+ffc.parameters.FFC_PARAMETERS["crosslink"] = False
 
 
 def nest_matrix_norm(A):
