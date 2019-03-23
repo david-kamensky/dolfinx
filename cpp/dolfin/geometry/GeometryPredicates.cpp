@@ -9,7 +9,7 @@
 #include "predicates.h"
 #include <cfloat>
 #include <cmath>
-#include <spdlog/spdlog.h>
+#include <dolfin/log/log.h>
 
 using namespace dolfin;
 using namespace dolfin::geometry;
@@ -25,9 +25,9 @@ bool GeometryPredicates::is_degenerate(const std::vector<Point>& simplex,
   case 3:
     return is_degenerate_3d(simplex);
   default:
-    spdlog::error("GeometryPredicates.cpp", "is_degenerate",
-                  "Unkonwn dimension (only implemented for dimension 2 and 3");
-    throw std::runtime_error("Illegal dimension");
+    log::dolfin_error(
+        "GeometryPredicates.cpp", "is_degenerate",
+        "Unkonwn dimension (only implemented for dimension 2 and 3");
   }
   return false;
 }
@@ -36,7 +36,7 @@ bool GeometryPredicates::is_degenerate_2d(const std::vector<Point>& simplex)
 {
   if (simplex.size() < 2 or simplex.size() > 3)
   {
-    spdlog::info("Degenerate 2D simplex with %d vertices.", simplex.size());
+    log::info("Degenerate 2D simplex with %d vertices.", simplex.size());
     return true;
   }
 
@@ -49,11 +49,10 @@ bool GeometryPredicates::is_degenerate_2d(const std::vector<Point>& simplex)
   }
 
   // Shouldn't get here
-  spdlog::error(
+  log::dolfin_error(
       "GeometryPredicates.h", "call _is_degenerate_2d",
       "Only implemented for simplices of tdim 0, 1 and 2, not tdim = %d",
       simplex.size() - 1);
-  throw std::runtime_error("Illegal dimension");
 
   return true;
 }
@@ -62,7 +61,7 @@ bool GeometryPredicates::is_degenerate_3d(const std::vector<Point>& simplex)
 {
   if (simplex.size() < 2 or simplex.size() > 4)
   {
-    spdlog::info("Degenerate 3D simplex with %d vertices.", simplex.size());
+    log::info("Degenerate 3D simplex with %d vertices.", simplex.size());
     return true;
   }
 
@@ -97,11 +96,11 @@ bool GeometryPredicates::is_degenerate_3d(const std::vector<Point>& simplex)
   }
 
   // Shouldn't get here
-  spdlog::error(
+  log::dolfin_error(
       "GeometryPredicates.h", "call _is_degenerate_3d",
       "Only implemented for simplices of tdim 0, 1, 2 and 3, not tdim = %d",
       simplex.size() - 1);
-  throw std::runtime_error("Illegal dimension");
+
   return true;
 }
 //-----------------------------------------------------------------------------
@@ -186,9 +185,9 @@ bool GeometryPredicates::convex_hull_is_degenerate(
     return false;
   }
 
-  spdlog::error("GeometryPredicates.h", "call convex_hull_is_degenerate",
-                "Only fully implemented for gdim == 3, not gdim = %d", gdim);
-  throw std::runtime_error("Illegal dimension");
+  log::dolfin_error("GeometryPredicates.h", "call convex_hull_is_degenerate",
+                    "Only fully implemented for gdim == 3, not gdim = %d",
+                    gdim);
   return false;
 }
 //-----------------------------------------------------------------------------

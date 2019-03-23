@@ -21,7 +21,6 @@
 #include <fstream>
 #include <iomanip>
 #include <ostream>
-#include <spdlog/spdlog.h>
 #include <sstream>
 #include <vector>
 
@@ -52,10 +51,9 @@ void VTKWriter::write_cell_data(const function::Function& u,
   const std::size_t rank = u.value_rank();
   if (rank > 2)
   {
-    spdlog::error("VTKFile.cpp", "write data to VTK file",
-                  "Don't know how to handle vector function with dimension "
-                  "other than 2 or 3");
-    throw std::runtime_error("Invalid dimension");
+    log::dolfin_error("VTKFile.cpp", "write data to VTK file",
+                      "Don't know how to handle vector function with dimension "
+                      "other than 2 or 3");
   }
 
   // Get number of components
@@ -76,10 +74,10 @@ void VTKWriter::write_cell_data(const function::Function& u,
   {
     if (!(data_dim == 2 || data_dim == 3))
     {
-      spdlog::error("VTKWriter.cpp", "write data to VTK file",
-                    "Don't know how to handle vector function with dimension "
-                    "other than 2 or 3");
-      throw std::runtime_error("Invalid dimension");
+      log::dolfin_error(
+          "VTKWriter.cpp", "write data to VTK file",
+          "Don't know how to handle vector function with dimension "
+          "other than 2 or 3");
     }
     fp << "<CellData  Vectors=\"" << u.name() << "\"> " << std::endl;
     fp << "<DataArray  type=\"Float64\"  Name=\"" << u.name()
@@ -89,10 +87,10 @@ void VTKWriter::write_cell_data(const function::Function& u,
   {
     if (!(data_dim == 4 || data_dim == 9))
     {
-      spdlog::error("VTKFile.cpp", "write data to VTK file",
-                    "Don't know how to handle tensor function with dimension "
-                    "other than 4 or 9");
-      throw std::runtime_error("Invalid dimension");
+      log::dolfin_error(
+          "VTKFile.cpp", "write data to VTK file",
+          "Don't know how to handle tensor function with dimension "
+          "other than 4 or 9");
     }
     fp << "<CellData  Tensors=\"" << u.name() << "\"> " << std::endl;
     fp << "<DataArray  type=\"Float64\"  Name=\"" << u.name()
@@ -190,11 +188,10 @@ void VTKWriter::write_ascii_mesh(const mesh::Mesh& mesh, std::size_t cell_dim,
   file.precision(16);
   if (!file.is_open())
   {
-    spdlog::error("VTKWriter.cpp",
-                  "write mesh to VTK file"
-                  "Unable to open file \"%s\"",
-                  filename.c_str());
-    throw std::runtime_error("IO Error");
+    log::dolfin_error("VTKWriter.cpp",
+                      "write mesh to VTK file"
+                      "Unable to open file \"%s\"",
+                      filename.c_str());
   }
 
   // Write vertex positions
@@ -269,9 +266,8 @@ std::uint8_t VTKWriter::vtk_cell_type(const mesh::Mesh& mesh,
     vtk_cell_type = 1;
   else
   {
-    spdlog::error("VTKWriter.cpp", "write data to VTK file",
-                  "Unknown cell type (%d)", (int)cell_type);
-    throw std::runtime_error("Unknown cell type");
+    log::dolfin_error("VTKWriter.cpp", "write data to VTK file",
+                      "Unknown cell type (%d)", cell_type);
   }
 
   return vtk_cell_type;

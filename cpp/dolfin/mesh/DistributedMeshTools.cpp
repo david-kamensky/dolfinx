@@ -15,10 +15,10 @@
 #include "dolfin/common/Timer.h"
 #include "dolfin/graph/Graph.h"
 #include "dolfin/graph/SCOTCH.h"
+#include "dolfin/log/log.h"
 #include <Eigen/Dense>
 #include <boost/multi_array.hpp>
 #include <complex>
-#include <spdlog/spdlog.h>
 
 using namespace dolfin;
 using namespace dolfin::mesh;
@@ -162,7 +162,8 @@ DistributedMeshTools::number_entities(
   // from mesh global numbering, e.g. when computing mesh entity
   // numbering for problems with periodic boundary conditions.
 
-  spdlog::info(
+  log::log(
+      PROGRESS,
       "Number mesh entities for distributed mesh (for specified vertex ids).",
       d);
   common::Timer timer(
@@ -425,7 +426,7 @@ DistributedMeshTools::locate_off_process_entities(
 
   if (dim == 0)
   {
-    spdlog::warn("DistributedMeshTools::host_processes has not been tested for "
+    log::warning("DistributedMeshTools::host_processes has not been tested for "
                  "vertices.");
   }
 
@@ -564,7 +565,7 @@ std::unordered_map<std::uint32_t,
                    std::vector<std::pair<std::uint32_t, std::uint32_t>>>
 DistributedMeshTools::compute_shared_entities(const Mesh& mesh, std::size_t d)
 {
-  spdlog::info("Compute shared mesh entities of dimension %d.", d);
+  log::log(PROGRESS, "Compute shared mesh entities of dimension %d.", d);
   common::Timer timer("Computed shared mesh entities");
 
   // MPI communicator
@@ -720,7 +721,7 @@ DistributedMeshTools::compute_entity_ownership(
     const std::vector<std::int64_t>& global_vertex_indices, std::size_t d)
 
 {
-  spdlog::info("Compute ownership for mesh entities of dimension %d.", d);
+  log::log(PROGRESS, "Compute ownership for mesh entities of dimension %d.", d);
   common::Timer timer("Compute mesh entity ownership");
 
   // Build global-to-local indices map for shared vertices

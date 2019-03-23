@@ -12,10 +12,10 @@
 #include <boost/container/vector.hpp>
 #include <dolfin/common/MPI.h>
 #include <dolfin/common/Variable.h>
+#include <dolfin/log/log.h>
 #include <map>
 #include <memory>
 #include <unordered_set>
-#include <spdlog/spdlog.h>
 
 namespace dolfin
 {
@@ -266,7 +266,7 @@ MeshFunction<T>::MeshFunction(std::shared_ptr<const Mesh> mesh,
   // Check that all values have been set, if not issue a debug message
   if (entities_values_set.size() != _values.size())
   {
-    spdlog::debug(
+    dolfin_debug(
         "Mesh value collection does not contain all values for all entities");
   }
 }
@@ -369,7 +369,7 @@ std::string MeshFunction<T>::str(bool verbose) const
   if (verbose)
   {
     s << str(false) << std::endl << std::endl;
-    spdlog::warn(
+    log::warning(
         "Verbose output of MeshFunctions must be implemented manually.");
   }
   else

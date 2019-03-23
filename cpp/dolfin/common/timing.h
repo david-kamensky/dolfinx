@@ -7,7 +7,7 @@
 #pragma once
 
 #include <cstdint>
-#include <dolfin/common/Table.h>
+#include <dolfin/log/Table.h>
 #include <string>
 
 namespace dolfin

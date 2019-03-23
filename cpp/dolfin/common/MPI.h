@@ -19,7 +19,8 @@
 #define MPICH_IGNORE_CXX_SEEK 1
 #include <mpi.h>
 
-#include <dolfin/common/Table.h>
+#include <dolfin/log/Table.h>
+#include <dolfin/log/log.h>
 
 namespace dolfin
 {

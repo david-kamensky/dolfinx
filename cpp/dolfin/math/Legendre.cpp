@@ -7,6 +7,7 @@
 #include "Legendre.h"
 #include <boost/math/special_functions/legendre.hpp>
 #include <cmath>
+#include <dolfin/log/log.h>
 
 //-----------------------------------------------------------------------------
 double dolfin::math::Legendre::eval(std::size_t n, double x)

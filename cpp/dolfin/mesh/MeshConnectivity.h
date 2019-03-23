@@ -8,6 +8,7 @@
 
 #include <Eigen/Dense>
 #include <cassert>
+#include <dolfin/log/log.h>
 #include <vector>
 
 namespace dolfin

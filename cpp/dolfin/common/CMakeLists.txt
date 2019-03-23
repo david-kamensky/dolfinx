@@ -8,10 +8,7 @@ set(HEADERS
   RangedIndexSet.h
   Set.h
   SubSystemsManager.h
-  Table.h
   Timer.h
-  TimeLogger.h
-  TimeLogManager.h
   timing.h
   types.h
   UniqueIdGenerator.h
@@ -25,10 +22,7 @@ set(SOURCES
   init.cpp
   MPI.cpp
   SubSystemsManager.cpp
-  Table.cpp
   Timer.cpp
-  TimeLogger.cpp
-  TimeLogManager.cpp
   timing.cpp
   UniqueIdGenerator.cpp
   utils.cpp

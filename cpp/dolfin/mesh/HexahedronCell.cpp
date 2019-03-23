@@ -10,7 +10,7 @@
 #include "MeshEntity.h"
 #include "Vertex.h"
 #include <algorithm>
-#include <spdlog/spdlog.h>
+#include <dolfin/log/log.h>
 
 using namespace dolfin;
 using namespace dolfin::mesh;
@@ -31,10 +31,9 @@ std::size_t HexahedronCell::num_entities(std::size_t dim) const
   case 3:
     return 1; // cells
   default:
-    spdlog::error("HexahedronCell.cpp",
-                  "access number of entities of hexahedron cell",
-                  "Illegal topological dimension (%d)", dim);
-    throw std::runtime_error("Illegal topological dimension");
+    log::dolfin_error("HexahedronCell.cpp",
+                      "access number of entities of hexahedron cell",
+                      "Illegal topological dimension (%d)", dim);
   }
 
   return 0;
@@ -53,10 +52,10 @@ std::size_t HexahedronCell::num_vertices(std::size_t dim) const
   case 3:
     return 8; // cells
   default:
-    spdlog::error("HexahedronCell.cpp",
-                  "access number of vertices for subsimplex of hexahedron cell",
-                  "Illegal topological dimension (%d)", dim);
-    throw std::runtime_error("Illegal topological dimension");
+    log::dolfin_error(
+        "HexahedronCell.cpp",
+        "access number of vertices for subsimplex of hexahedron cell",
+        "Illegal topological dimension (%d)", dim);
   }
 
   return 0;
@@ -130,10 +129,9 @@ void HexahedronCell::create_entities(boost::multi_array<std::int32_t, 2>& e,
     e[5][3] = v[7];
     break;
   default:
-    spdlog::error(
+    log::dolfin_error(
         "HexahedronCell.cpp", "create entities of tetrahedron cell",
         "Don't know how to create entities of topological dimension %d", dim);
-    throw std::runtime_error("Illegal topological dimension");
   }
 }
 //-----------------------------------------------------------------------------
@@ -141,14 +139,12 @@ double HexahedronCell::volume(const MeshEntity& cell) const
 {
   if (cell.dim() != 2)
   {
-    spdlog::error("HexahedronCell.cpp", "compute volume (area) of cell",
-                  "Illegal mesh entity");
-    throw std::runtime_error("Illegal topological dimension");
+    log::dolfin_error("HexahedronCell.cpp", "compute volume (area) of cell",
+                      "Illegal mesh entity");
   }
 
-  spdlog::error("HexahedronCell.cpp", "compute volume of hexahedron",
-                "Not implemented");
-  throw std::runtime_error("Not Implemented");
+  log::dolfin_error("HexahedronCell.cpp", "compute volume of hexahedron",
+                    "Not implemented");
 
   return 0.0;
 }
@@ -158,24 +154,23 @@ double HexahedronCell::circumradius(const MeshEntity& cell) const
   // Check that we get a cell
   if (cell.dim() != 2)
   {
-    spdlog::error("HexahedronCell.cpp",
-                  "compute circumradius of hexahedron cell",
-                  "Illegal mesh entity");
-    throw std::runtime_error("Illegal topological dimension");
+    log::dolfin_error("HexahedronCell.cpp",
+                      "compute circumradius of hexahedron cell",
+                      "Illegal mesh entity");
   }
 
-  spdlog::error("HexahedronCell.cpp", "compute circumradius of hexahedron cell",
-                "Don't know how to compute diameter");
-  throw std::runtime_error("Not Implemented");
+  log::dolfin_error("HexahedronCell.cpp",
+                    "compute circumradius of hexahedron cell",
+                    "Don't know how to compute diameter");
 
+  dolfin_not_implemented();
   return 0.0;
 }
 //-----------------------------------------------------------------------------
 double HexahedronCell::squared_distance(const mesh::Cell& cell,
                                         const geometry::Point& point) const
 {
-  spdlog::error("Not implemented");
-  throw std::runtime_error("");
+  dolfin_not_implemented();
   return 0.0;
 }
 //-----------------------------------------------------------------------------
@@ -188,23 +183,21 @@ double HexahedronCell::normal(const mesh::Cell& cell, std::size_t facet,
 geometry::Point HexahedronCell::normal(const mesh::Cell& cell,
                                        std::size_t facet) const
 {
-  spdlog::error("Not implemented");
-  throw std::runtime_error("");
+  dolfin_not_implemented();
   return geometry::Point();
 }
 //-----------------------------------------------------------------------------
 geometry::Point HexahedronCell::cell_normal(const mesh::Cell& cell) const
 {
-  spdlog::error("Not implemented");
-  throw std::runtime_error("");
+  dolfin_not_implemented();
   return geometry::Point();
 }
 //-----------------------------------------------------------------------------
 double HexahedronCell::facet_area(const mesh::Cell& cell,
                                   std::size_t facet) const
 {
-  spdlog::error("Not implemented");
-  throw std::runtime_error("");
+  dolfin_not_implemented();
+
   return 0.0;
 }
 //-----------------------------------------------------------------------------

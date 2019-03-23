@@ -6,9 +6,10 @@
 
 #include "Table.h"
 #include <cfloat>
+#include <dolfin/log/LogStream.h>
+#include <dolfin/log/log.h>
 #include <iomanip>
 #include <iostream>
-#include <spdlog/spdlog.h>
 #include <sstream>
 
 using namespace dolfin;
@@ -85,10 +86,9 @@ std::string Table::get(std::string row, std::string col) const
   auto it = values.find(key);
   if (it == values.end())
   {
-    spdlog::error("Table.cpp", "access table value",
-                  "Missing table value for entry (\"%s\", \"%s\")", row.c_str(),
-                  col.c_str());
-    throw std::runtime_error("Missing table value");
+    log::dolfin_error("Table.cpp", "access table value",
+                      "Missing table value for entry (\"%s\", \"%s\")",
+                      row.c_str(), col.c_str());
   }
 
   return it->second;
@@ -100,14 +100,53 @@ double Table::get_value(std::string row, std::string col) const
   auto it = dvalues.find(key);
   if (it == dvalues.end())
   {
-    spdlog::error("Table.cpp", "access table value",
-                  "Missing double value for entry (\"%s\", \"%s\")",
-                  row.c_str(), col.c_str());
-    throw std::runtime_error("Missing table value");
+    log::dolfin_error("Table.cpp", "access table value",
+                      "Missing double value for entry (\"%s\", \"%s\")",
+                      row.c_str(), col.c_str());
   }
 
   return it->second;
 }
+//-----------------------------------------------------------------------------
+/* Removed after storing values as strings instead of double
+Table Table::operator+ (const Table& table) const
+{
+  // Check table sizes
+  if (rows.size() != table.rows.size() || cols.size() != table.cols.size())
+  {
+    log::dolfin_error("Table.cpp",
+                 "add tables",
+                 "Dimension mismatch for addition of tables");
+  }
+
+  // Add tables
+  Table t;
+  for (auto i = rows.begin(); i !=rows.end(); i++)
+    for (auto j = cols.begin(); j != cols.end(); j++)
+      t.set(*i, *j, get(*i, *j) + table.get(*i, *j));
+
+  return t;
+}
+//-----------------------------------------------------------------------------
+Table Table::operator- (const Table& table) const
+{
+  // Check table sizes
+  if (rows.size() != table.rows.size() || cols.size() != table.cols.size())
+  {
+    log::dolfin_error("Table.cpp",
+                 "subtract tables",
+                 "Dimension mismatch for addition of tables");
+  }
+
+  // Add tables
+  Table t;
+  for (auto i = rows.begin(); i !=rows.end(); i++)
+    for (auto j = cols.begin(); j != cols.end(); j++)
+      t.set(*i, *j, get(*i, *j) - table.get(*i, *j));
+
+  return t;
+}
+*/
 //-----------------------------------------------------------------------------
 const Table& Table::operator=(const Table& table)
 {

@@ -4,13 +4,10 @@
 //
 // SPDX-License-Identifier:    LGPL-3.0-or-later
 
-#include <algorithm>
-#include <numeric>
-
-#include <spdlog/spdlog.h>
-
 #include "MPI.h"
 #include "SubSystemsManager.h"
+#include <algorithm>
+#include <numeric>
 
 //-----------------------------------------------------------------------------
 dolfin::MPI::Comm::Comm(MPI_Comm comm)
@@ -20,11 +17,7 @@ dolfin::MPI::Comm::Comm(MPI_Comm comm)
   {
     int err = MPI_Comm_dup(comm, &_comm);
     if (err != MPI_SUCCESS)
-    {
-      spdlog::error("Duplication of MPI communicator failed (MPI_Comm_dup)");
-      throw std::runtime_error(
-          "Duplication of MPI communicator failed (MPI_Comm_dup)");
-    }
+      log::error("Duplication of MPI communicator failed (MPI_Comm_dup");
   }
   else
     _comm = MPI_COMM_NULL;
@@ -70,7 +63,10 @@ std::uint32_t dolfin::MPI::Comm::size() const
   return size;
 }
 //-----------------------------------------------------------------------------
-void dolfin::MPI::Comm::barrier() const { MPI_Barrier(_comm); }
+void dolfin::MPI::Comm::barrier() const
+{
+  MPI_Barrier(_comm);
+}
 //-----------------------------------------------------------------------------
 void dolfin::MPI::Comm::reset(MPI_Comm comm)
 {
@@ -116,7 +112,10 @@ std::uint32_t dolfin::MPI::size(const MPI_Comm comm)
   return size;
 }
 //-----------------------------------------------------------------------------
-void dolfin::MPI::barrier(const MPI_Comm comm) { MPI_Barrier(comm); }
+void dolfin::MPI::barrier(const MPI_Comm comm)
+{
+  MPI_Barrier(comm);
+}
 //-----------------------------------------------------------------------------
 std::size_t dolfin::MPI::global_offset(const MPI_Comm comm, std::size_t range,
                                        bool exclusive)

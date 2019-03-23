@@ -6,6 +6,7 @@
 
 #include "MeshConnectivity.h"
 #include <boost/functional/hash.hpp>
+#include <dolfin/log/log.h>
 #include <sstream>
 
 using namespace dolfin;

@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <dolfin/common/Set.h>
 #include <dolfin/common/types.h>
+#include <dolfin/log/log.h>
 #include <map>
 #include <string>
 #include <tuple>

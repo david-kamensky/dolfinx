@@ -6,21 +6,22 @@
 
 #pragma once
 
-#include "TimeLogger.h"
+#include "Logger.h"
 
 namespace dolfin
 {
 
-namespace common
+namespace log
 {
 
 /// Logger initialisation
 
-class TimeLogManager
+class LogManager
 {
 public:
   /// Singleton instance of logger
-  static TimeLogger& logger();
+  static Logger& logger();
 };
 }
 }
+
