@@ -21,6 +21,7 @@
 #include <dolfin/fem/DirichletBC.h>
 #include <dolfin/fem/DiscreteOperators.h>
 #include <dolfin/fem/DofMap.h>
+#include <dolfin/fem/ElementDofLayout.h>
 #include <dolfin/fem/FiniteElement.h>
 #include <dolfin/fem/Form.h>
 #include <dolfin/fem/PETScDMCollection.h>
@@ -129,6 +130,9 @@ void fem(py::module& m)
         py::return_value_policy::take_ownership,
         "Create nested sparse matrix for bilinear forms.");
 
+  m.def("create_element_dof_layout", &dolfin::fem::create_element_dof_layout,
+        "Create an ElementDofLayout from a ufc_dofmap.");
+
   // dolfin::fem::FiniteElement
   py::class_<dolfin::fem::FiniteElement,
              std::shared_ptr<dolfin::fem::FiniteElement>>(
@@ -177,10 +181,20 @@ void fem(py::module& m)
       .def("block_size", &dolfin::fem::GenericDofMap::block_size)
       .def("set", &dolfin::fem::GenericDofMap::set);
 
+  // dolfin::fem::ElementDofLayout
+  py::class_<dolfin::fem::ElementDofLayout,
+             std::shared_ptr<dolfin::fem::ElementDofLayout>>(
+      m, "ElementDofLayout", "Element DofLayout object")
+      .def(py::init<
+           int, std::vector<std::vector<std::vector<int>>>,
+           std::vector<std::vector<std::vector<int>>>, std::vector<int>,
+           std::vector<std::shared_ptr<dolfin::fem::ElementDofLayout>>>());
+
   // dolfin::fem::DofMap
   py::class_<dolfin::fem::DofMap, std::shared_ptr<dolfin::fem::DofMap>,
              dolfin::fem::GenericDofMap>(m, "DofMap", "DofMap object")
-      .def(py::init<const ufc_dofmap&, const dolfin::mesh::Mesh&>())
+      .def(py::init<std::shared_ptr<dolfin::fem::ElementDofLayout>,
+                    const dolfin::mesh::Mesh&>())
       .def("ownership_range", &dolfin::fem::DofMap::ownership_range)
       .def("cell_dofs", &dolfin::fem::DofMap::cell_dofs);
 

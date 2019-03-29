@@ -170,15 +170,20 @@ int main(int argc, char* argv[])
       MPI_COMM_WORLD, pt, {{8, 8, 8}}, mesh::CellType::Type::tetrahedron,
       mesh::GhostMode::none));
 
-  auto space = std::unique_ptr<ufc_function_space, decltype(free)*>(
-      hyperelasticity_functionspace_create(), free);
+  ufc_function_space* space = hyperelasticity_functionspace_create();
 
-  auto ufc_map = std::shared_ptr<ufc_dofmap>(space->dofmap(), free);
+  ufc_dofmap* ufc_map = space->dofmap();
+  auto element_dof_layout = std::make_shared<fem::ElementDofLayout>(
+      fem::create_element_dof_layout(*ufc_map, {}, mesh->type()));
+  std::free(ufc_map);
+
   auto V = std::make_shared<function::FunctionSpace>(
       mesh,
       std::make_shared<fem::FiniteElement>(
           std::shared_ptr<ufc_finite_element>(space->element(), free)),
-      std::make_shared<fem::DofMap>(*ufc_map, *mesh));
+      std::make_shared<fem::DofMap>(element_dof_layout, *mesh));
+
+  std::free(space);
 
   // Define Dirichlet boundaries
   Left left;

@@ -53,7 +53,7 @@ public:
   ///         The ufc_dofmap.
   /// @param[in] mesh (mesh::Mesh&)
   ///         The mesh.
-  DofMap(const ufc_dofmap& ufc_dofmap, const mesh::Mesh& mesh);
+  DofMap(std::shared_ptr<ElementDofLayout> element_dof_layout, const mesh::Mesh& mesh);
 
 private:
   // Create a sub-dofmap (a view) from parent_dofmap

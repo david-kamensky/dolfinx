@@ -21,12 +21,11 @@ using namespace dolfin;
 using namespace dolfin::fem;
 
 //-----------------------------------------------------------------------------
-DofMap::DofMap(const ufc_dofmap& ufc_dofmap, const mesh::Mesh& mesh)
-    : _cell_dimension(-1), _global_dimension(0)
+DofMap::DofMap(std::shared_ptr<ElementDofLayout> element_dof_layout,
+               const mesh::Mesh& mesh)
+    : _cell_dimension(-1), _global_dimension(0),
+      _element_dof_layout(element_dof_layout)
 {
-  _element_dof_layout = std::make_shared<ElementDofLayout>(
-      create_element_dof_layout(ufc_dofmap, {}, mesh.type()));
-
   _cell_dimension = _element_dof_layout->num_dofs();
   std::tie(_global_dimension, _index_map, _shared_nodes, _neighbours, _dofmap)
       = DofMapBuilder::build(*_element_dof_layout, mesh);

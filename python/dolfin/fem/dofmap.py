@@ -49,7 +49,8 @@ class DofMap:
         mesh: dolfin.cpp.mesh.Mesh
         """
         ufc_dofmap = make_ufc_dofmap(ufc_dofmap)
-        cpp_dofmap = cpp.fem.DofMap(ufc_dofmap, mesh)
+        element_dof_layout = cpp.fem.create_element_dof_layout(ufc_dofmap, [], mesh.type())
+        cpp_dofmap = cpp.fem.DofMap(element_dof_layout, mesh)
         return cls(cpp_dofmap)
 
     def global_dimension(self):
