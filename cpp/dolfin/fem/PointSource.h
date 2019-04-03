@@ -7,8 +7,8 @@
 #pragma once
 
 #include <dolfin/geometry/Point.h>
-#include <petscsys.h>
 #include <memory>
+#include <petscsys.h>
 #include <utility>
 
 namespace dolfin
@@ -24,31 +24,28 @@ namespace la
 class PETScVector;
 }
 
-
 namespace fem
 {
 
 class PointSource
 {
-    public:
-    /// Create point source at given point of given magnitude
-    PointSource(std::shared_ptr<function::FunctionSpace> V,
-                const geometry::Point& point,
-                PetscScalar magnitude);
-    
-    /// Apply point source to right-hand side vector
-    void apply(la::PETScVector& b);
+public:
+  /// Create point source at given point of given magnitude
+  PointSource(std::shared_ptr<function::FunctionSpace> V,
+              const geometry::Point& point, PetscScalar magnitude);
 
-    /// Destructor
-    ~PointSource() = default;
+  /// Apply point source to right-hand side vector
+  void apply(la::PETScVector& b);
 
-    private:
-    // Source term - pair of points and magnitude
-    geometry::Point _point;
-    PetscScalar _magniude;
-    std::shared_ptr<function::FunctionSpace> _V0;
+  /// Destructor
+  ~PointSource() = default;
+
+private:
+  // Source term - pair of points and magnitude
+  geometry::Point _point;
+  PetscScalar _magnitude;
+  std::shared_ptr<function::FunctionSpace> _V0;
 };
 
 } // namespace fem
 } // namespace dolfin
-
