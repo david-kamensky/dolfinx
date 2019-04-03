@@ -17,6 +17,7 @@ set(HEADERS
   FormIntegrals.h
   GenericDofMap.h
   PETScDMCollection.h
+  PointSource.h
   SparsityPatternBuilder.h
   PARENT_SCOPE)
 
@@ -37,5 +38,6 @@ set(SOURCES
   FormIntegrals.cpp
   GenericDofMap.cpp
   PETScDMCollection.cpp
+  PointSource.cpp
   SparsityPatternBuilder.cpp
   PARENT_SCOPE)
