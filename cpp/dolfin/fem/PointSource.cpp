@@ -21,6 +21,9 @@ fem::PointSource::PointSource(std::shared_ptr<function::FunctionSpace> V,
                               PetscScalar magnitude)
     : _V0(V)
 {
+  assert(V);
+  assert(magnitude);
+
   _point = point;
   _magnitude = magnitude;
 }

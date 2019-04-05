@@ -37,7 +37,7 @@ public:
   /// Apply point source to right-hand side vector
   void apply(la::PETScVector& b);
 
-  /// Destructor
+  // Destructor
   ~PointSource() = default;
 
 private:

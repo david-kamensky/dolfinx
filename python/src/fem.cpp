@@ -24,6 +24,7 @@
 #include <dolfin/fem/FiniteElement.h>
 #include <dolfin/fem/Form.h>
 #include <dolfin/fem/PETScDMCollection.h>
+#include <dolfin/fem/PointSource.h>
 #include <dolfin/fem/SparsityPatternBuilder.h>
 #include <dolfin/fem/assembler.h>
 #include <dolfin/fem/utils.h>
@@ -324,6 +325,23 @@ void fem(py::module& m)
       .def("mesh", &dolfin::fem::Form::mesh)
       .def("function_space", &dolfin::fem::Form::function_space)
       .def("coordinate_mapping", &dolfin::fem::Form::coordinate_mapping);
+
+  // dolfin::fem::PointSource
+  py::class_<dolfin::fem::PointSource,
+             std::shared_ptr<dolfin::fem::PointSource>>(m, "PointSource")
+      .def(py::init([](py::object V, const dolfin::geometry::Point& p,
+                       PetscScalar value) {
+             std::shared_ptr<dolfin::function::FunctionSpace> _V;
+             if (py::hasattr(V, "_cpp_object"))
+               _V = V.attr("_cpp_object")
+                        .cast<
+                            std::shared_ptr<dolfin::function::FunctionSpace>>();
+             else
+               _V = V.cast<std::shared_ptr<dolfin::function::FunctionSpace>>();
+
+             return dolfin::fem::PointSource(_V, p, value);
+           }),
+           py::arg("V"), py::arg("p"), py::arg("value"));
 
   // dolfin::fem::PETScDMCollection
   py::class_<dolfin::fem::PETScDMCollection,
